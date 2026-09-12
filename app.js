@@ -214,15 +214,83 @@ async function getCachedLibrary() {
 }
 
 function mergeOfflineTracks(library, cachedLibrary) {
-  const serverTrackIds = new Set(library.tracks.map((track) => track.id));
-  const cachedTracks = cachedLibrary?.tracks || [];
-  const localOnlyTracks = cachedTracks
-    .filter((track) => state.offlineTrackIds.has(track.id) && !serverTrackIds.has(track.id))
-    .map((track) => ({ ...track, localOnly: true }));
+
+  const serverTracks =
+    Array.isArray(library?.tracks)
+      ? library.tracks
+      : [];
+
+
+  const serverTrackIds =
+    new Set(
+      serverTracks.map(
+        (track) => track.id
+      )
+    );
+
+
+  const cachedTracks =
+    cachedLibrary?.tracks || [];
+
+
+  /*
+   * Web 自己保存的本地 MP3，
+   * Mac 没有这些歌曲，所以保留下来。
+   */
+  const localOnlyTracks =
+    cachedTracks
+      .filter(
+        (track) =>
+          state.offlineTrackIds.has(track.id) &&
+          !serverTrackIds.has(track.id)
+      )
+      .map(
+        (track) => ({
+          ...track,
+          localOnly: true
+        })
+      );
+
+
+  /*
+   * 播放列表开始归 Web 管。
+   *
+   * 第一次迁移时如果 Web 完全没有缓存，
+   * 可以把原来 Mac 的播放列表复制进来一次。
+   *
+   * 一旦 Web 已经有自己的 library，
+   * 以后 Mac 就不能再覆盖 playlists。
+   */
+  const playlists =
+    cachedLibrary
+      ? (
+        Array.isArray(cachedLibrary.playlists)
+          ? cachedLibrary.playlists
+          : []
+      )
+      : (
+        Array.isArray(library?.playlists)
+          ? library.playlists
+          : []
+      );
+
 
   return {
-    ...library,
-    tracks: [...library.tracks.map((track) => ({ ...track, localOnly: false })), ...localOnlyTracks]
+
+    ...(cachedLibrary || {}),
+
+    tracks: [
+      ...serverTracks.map(
+        (track) => ({
+          ...track,
+          localOnly: false
+        })
+      ),
+
+      ...localOnlyTracks
+    ],
+
+    playlists
   };
 }
 
@@ -1461,7 +1529,89 @@ function pollFavoriteJob(jobId) {
 
         els.favoriteImportButton.disabled = false;
 
+        /*
+ * 收藏夹目前仍由 Desktop 创建。
+ * 这是解耦期间的临时兼容桥：
+ * 只把刚刚导入的这个收藏夹复制到 Web，
+ * 不让 Mac 的其他播放列表覆盖 Web。
+ */
+        let importedPlaylist = null;
+
+
+        if (
+          job.status === 'complete' &&
+          job.playlistId
+        ) {
+
+          try {
+
+            const serverLibrary =
+              await api('/api/library');
+
+
+            importedPlaylist =
+              serverLibrary.playlists?.find(
+                (playlist) =>
+                  playlist.id ===
+                  job.playlistId
+              ) || null;
+
+          } catch (error) {
+
+            console.warn(
+              '读取收藏夹播放列表失败：',
+              error
+            );
+
+          }
+
+        }
+
+
         await loadLibrary();
+
+
+        if (importedPlaylist) {
+
+          const existingIndex =
+            state.library.playlists.findIndex(
+              (playlist) =>
+                playlist.id ===
+                importedPlaylist.id
+            );
+
+
+          if (existingIndex >= 0) {
+
+            /*
+             * 收藏夹再次同步时，
+             * 更新里面的歌曲，
+             * 但保留 Web 里的播放列表位置。
+             */
+            state.library.playlists[
+              existingIndex
+            ] = {
+              ...state.library.playlists[
+              existingIndex
+              ],
+              ...importedPlaylist
+            };
+
+          } else {
+
+            state.library.playlists.push(
+              importedPlaylist
+            );
+
+          }
+
+
+          await cacheLibrary(
+            state.library
+          );
+
+        }
+
 
         if (job.playlistId) {
           state.selectedPlaylistId = job.playlistId;
