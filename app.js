@@ -2597,6 +2597,661 @@ function openTextEditor({ title, label, value, primaryText, onSave }) {
   });
 }
 
+const GAMA_BACKUP_MAGIC =
+  'GAMAMUSIC1';
+
+
+async function exportGamaBackup() {
+
+  const records =
+    await getAllOfflineTracks();
+
+
+  const header = {
+
+    format:
+      'gama-music-backup',
+
+    version:
+      1,
+
+    createdAt:
+      new Date().toISOString(),
+
+    library:
+      state.library,
+
+    selectedPlaylistId:
+      state.selectedPlaylistId,
+
+    mode:
+      state.mode,
+
+    records:
+      []
+  };
+
+
+  const payloadParts =
+    [];
+
+
+  for (const record of records) {
+
+    const audioBlob =
+      record?.blob instanceof Blob
+        ? record.blob
+        : new Blob([]);
+
+
+    const coverBlob =
+      record?.coverBlob instanceof Blob
+        ? record.coverBlob
+        : new Blob([]);
+
+
+    header.records.push({
+
+      trackId:
+        record.trackId,
+
+      track:
+        record.track || null,
+
+      savedAt:
+        record.savedAt || null,
+
+      updatedAt:
+        record.updatedAt || null,
+
+      audioLength:
+        audioBlob.size,
+
+      audioType:
+        audioBlob.type ||
+        'audio/mpeg',
+
+      coverLength:
+        coverBlob.size,
+
+      coverType:
+        coverBlob.type || ''
+
+    });
+
+
+    payloadParts.push(
+      audioBlob,
+      coverBlob
+    );
+
+  }
+
+
+  const encoder =
+    new TextEncoder();
+
+
+  const magicBytes =
+    encoder.encode(
+      GAMA_BACKUP_MAGIC
+    );
+
+
+  const headerBytes =
+    encoder.encode(
+      JSON.stringify(header)
+    );
+
+
+  const lengthBytes =
+    new Uint8Array(4);
+
+
+  new DataView(
+    lengthBytes.buffer
+  ).setUint32(
+    0,
+    headerBytes.byteLength,
+    true
+  );
+
+
+  const date =
+    new Date()
+      .toISOString()
+      .slice(0, 10);
+
+
+  const fileName =
+    `gama-music-backup-${date}.gama`;
+
+
+  const backupFile =
+    new File(
+      [
+        magicBytes,
+        lengthBytes,
+        headerBytes,
+        ...payloadParts
+      ],
+      fileName,
+      {
+        type:
+          'application/octet-stream'
+      }
+    );
+
+
+  /*
+   * 浏览器下载。
+   */
+  const url =
+    URL.createObjectURL(
+      backupFile
+    );
+
+
+  const link =
+    document.createElement(
+      'a'
+    );
+
+
+  link.href =
+    url;
+
+  link.download =
+    fileName;
+
+
+  document.body.append(
+    link
+  );
+
+
+  link.click();
+
+  link.remove();
+
+
+  window.setTimeout(
+    () =>
+      URL.revokeObjectURL(
+        url
+      ),
+    3000
+  );
+
+
+  return {
+
+    trackCount:
+      records.filter(
+        (record) =>
+          record?.blob?.size
+      ).length,
+
+    size:
+      backupFile.size
+  };
+}
+
+
+
+async function importGamaBackup(file) {
+
+  const encoder =
+    new TextEncoder();
+
+
+  const decoder =
+    new TextDecoder();
+
+
+  const magicBytes =
+    encoder.encode(
+      GAMA_BACKUP_MAGIC
+    );
+
+
+  const prefixLength =
+    magicBytes.length + 4;
+
+
+  if (
+    !file ||
+    file.size < prefixLength
+  ) {
+    throw new Error(
+      '这不是有效的 Gama Music 备份。'
+    );
+  }
+
+
+  const prefixBuffer =
+    await file
+      .slice(
+        0,
+        prefixLength
+      )
+      .arrayBuffer();
+
+
+  const prefixBytes =
+    new Uint8Array(
+      prefixBuffer
+    );
+
+
+  const magic =
+    decoder.decode(
+      prefixBytes.slice(
+        0,
+        magicBytes.length
+      )
+    );
+
+
+  if (
+    magic !==
+    GAMA_BACKUP_MAGIC
+  ) {
+
+    throw new Error(
+      '无法识别这个备份文件。'
+    );
+
+  }
+
+
+  const headerLength =
+    new DataView(
+      prefixBuffer
+    ).getUint32(
+      magicBytes.length,
+      true
+    );
+
+
+  const headerStart =
+    prefixLength;
+
+
+  const headerEnd =
+    headerStart +
+    headerLength;
+
+
+  if (
+    !headerLength ||
+    headerEnd > file.size
+  ) {
+
+    throw new Error(
+      '备份文件不完整。'
+    );
+
+  }
+
+
+  let header;
+
+
+  try {
+
+    header =
+      JSON.parse(
+        await file
+          .slice(
+            headerStart,
+            headerEnd
+          )
+          .text()
+      );
+
+  } catch {
+
+    throw new Error(
+      '备份信息损坏。'
+    );
+
+  }
+
+
+  if (
+    header?.format !==
+    'gama-music-backup' ||
+    header?.version !== 1 ||
+    !header.library ||
+    !Array.isArray(
+      header.library.tracks
+    ) ||
+    !Array.isArray(
+      header.library.playlists
+    ) ||
+    !Array.isArray(
+      header.records
+    )
+  ) {
+
+    throw new Error(
+      '不支持这个备份版本。'
+    );
+
+  }
+
+
+  /*
+   * 先检查二进制区域长度，
+   * 在真正修改 IndexedDB 前
+   * 确认文件没有损坏。
+   */
+  let payloadSize =
+    0;
+
+
+  for (
+    const record of
+    header.records
+  ) {
+
+    const audioLength =
+      Number(
+        record.audioLength
+      ) || 0;
+
+
+    const coverLength =
+      Number(
+        record.coverLength
+      ) || 0;
+
+
+    if (
+      audioLength < 0 ||
+      coverLength < 0
+    ) {
+
+      throw new Error(
+        '备份文件损坏。'
+      );
+
+    }
+
+
+    payloadSize +=
+      audioLength +
+      coverLength;
+
+  }
+
+
+  if (
+    headerEnd +
+    payloadSize >
+    file.size
+  ) {
+
+    throw new Error(
+      '备份文件不完整。'
+    );
+
+  }
+
+
+  /*
+   * 保存旧记录列表。
+   * 等新备份完全导入成功后，
+   * 才删除备份里不存在的旧歌曲。
+   */
+  const oldRecords =
+    await getAllOfflineTracks();
+
+
+  let cursor =
+    headerEnd;
+
+
+  const backupTrackIds =
+    new Set();
+
+
+  for (
+    const record of
+    header.records
+  ) {
+
+    const audioLength =
+      Number(
+        record.audioLength
+      ) || 0;
+
+
+    const coverLength =
+      Number(
+        record.coverLength
+      ) || 0;
+
+
+    const audioBlob =
+      audioLength
+        ? file.slice(
+          cursor,
+          cursor +
+          audioLength,
+          record.audioType ||
+          'audio/mpeg'
+        )
+        : null;
+
+
+    cursor +=
+      audioLength;
+
+
+    const coverBlob =
+      coverLength
+        ? file.slice(
+          cursor,
+          cursor +
+          coverLength,
+          record.coverType || ''
+        )
+        : null;
+
+
+    cursor +=
+      coverLength;
+
+
+    await putOfflineTrack({
+
+      trackId:
+        record.trackId,
+
+      track:
+        record.track,
+
+      blob:
+        audioBlob,
+
+      size:
+        audioLength,
+
+      coverBlob:
+        coverBlob,
+
+      coverSize:
+        coverLength,
+
+      savedAt:
+        record.savedAt ||
+        new Date()
+          .toISOString(),
+
+      updatedAt:
+        record.updatedAt ||
+        new Date()
+          .toISOString()
+
+    });
+
+
+    backupTrackIds.add(
+      record.trackId
+    );
+
+  }
+
+
+  /*
+   * 新备份成功写入后，
+   * 再移除旧备份之外的 MP3。
+   */
+  for (
+    const record of
+    oldRecords
+  ) {
+
+    if (
+      !backupTrackIds.has(
+        record.trackId
+      )
+    ) {
+
+      await deleteOfflineTrack(
+        record.trackId
+      );
+
+    }
+
+  }
+
+
+  /*
+   * 恢复音乐库和播放列表。
+   */
+  state.library =
+    header.library;
+
+
+  await cacheLibrary(
+    state.library
+  );
+
+
+  /*
+   * 恢复选中的播放列表。
+   */
+  const restoredPlaylist =
+    state.library.playlists.find(
+      (playlist) =>
+        playlist.id ===
+        header.selectedPlaylistId
+    );
+
+
+  state.selectedPlaylistId =
+    restoredPlaylist?.id ||
+    state.library.playlists[0]?.id ||
+    null;
+
+
+  if (
+    state.selectedPlaylistId
+  ) {
+
+    localStorage.setItem(
+      storageKeys.selectedPlaylist,
+      state.selectedPlaylistId
+    );
+
+  } else {
+
+    localStorage.removeItem(
+      storageKeys.selectedPlaylist
+    );
+
+  }
+
+
+  /*
+   * 恢复播放模式。
+   */
+  if (
+    [
+      'one',
+      'loop',
+      'shuffle'
+    ].includes(
+      header.mode
+    )
+  ) {
+
+    state.mode =
+      header.mode;
+
+    localStorage.setItem(
+      storageKeys.mode,
+      state.mode
+    );
+
+  }
+
+
+  /*
+   * 停止当前旧歌曲。
+   */
+  els.audio.pause();
+
+  els.audio.removeAttribute(
+    'src'
+  );
+
+
+  if (
+    state.activeObjectUrl
+  ) {
+
+    URL.revokeObjectURL(
+      state.activeObjectUrl
+    );
+
+  }
+
+
+  state.activeObjectUrl =
+    '';
+
+  state.currentTrackId =
+    null;
+
+
+  await refreshOfflineState();
+
+
+  setConnection(
+    `本地模式 · 已恢复 ${state.offlineTrackIds.size} 首`,
+    true
+  );
+
+
+  render();
+
+
+  return {
+
+    trackCount:
+      state.offlineTrackIds.size,
+
+    playlistCount:
+      state.library.playlists.length
+
+  };
+
+}
+
 async function importLocalMp3Files(fileList) {
 
   const files =
@@ -2809,6 +3464,38 @@ function openSettings() {
 
       <hr>
 
+<div class="field">
+
+  <span>
+    备份与恢复
+  </span>
+
+  <button
+    id="exportBackupButton"
+    class="secondary-button"
+    type="button"
+  >
+    导出完整备份
+  </button>
+
+  <input
+    id="importBackupInput"
+    type="file"
+    accept=".gama,application/octet-stream"
+  >
+
+</div>
+
+
+<p
+  id="backupStatus"
+  class="settings-note"
+>
+  备份包含本地 MP3、封面、歌单和歌曲信息。
+</p>
+
+      <hr>
+
 
       <label class="field">
 
@@ -2944,6 +3631,128 @@ function openSettings() {
 
     }
   );
+  const exportBackupButton =
+    $('#exportBackupButton');
+
+
+  const importBackupInput =
+    $('#importBackupInput');
+
+
+  const backupStatus =
+    $('#backupStatus');
+
+
+
+  exportBackupButton
+    ?.addEventListener(
+      'click',
+
+      async () => {
+
+        exportBackupButton.disabled =
+          true;
+
+
+        backupStatus.textContent =
+          '正在制作完整备份……';
+
+
+        try {
+
+          const result =
+            await exportGamaBackup();
+
+
+          backupStatus.textContent =
+            `备份完成：${result.trackCount} 首 · ${formatBytes(result.size)}`;
+
+
+        } catch (error) {
+
+          backupStatus.textContent =
+            `备份失败：${error.message}`;
+
+        } finally {
+
+          exportBackupButton.disabled =
+            false;
+
+        }
+
+      }
+    );
+
+
+
+  importBackupInput
+    ?.addEventListener(
+      'change',
+
+      async () => {
+
+        const file =
+          importBackupInput.files?.[0];
+
+
+        if (!file) {
+          return;
+        }
+
+
+        const confirmed =
+          window.confirm(
+            '恢复备份会用备份中的音乐库和播放列表替换当前本地内容。继续吗？'
+          );
+
+
+        if (!confirmed) {
+
+          importBackupInput.value =
+            '';
+
+          return;
+
+        }
+
+
+        importBackupInput.disabled =
+          true;
+
+
+        backupStatus.textContent =
+          '正在恢复 Gama Music……';
+
+
+        try {
+
+          const result =
+            await importGamaBackup(
+              file
+            );
+
+
+          backupStatus.textContent =
+            `恢复完成：${result.trackCount} 首 · ${result.playlistCount} 个播放列表`;
+
+
+        } catch (error) {
+
+          backupStatus.textContent =
+            `恢复失败：${error.message}`;
+
+        } finally {
+
+          importBackupInput.disabled =
+            false;
+
+          importBackupInput.value =
+            '';
+
+        }
+
+      }
+    );
 
 }
 
