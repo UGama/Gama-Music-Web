@@ -208,6 +208,27 @@ function cacheLibrary(library) {
   return offlineRequest(offlineDb.dataStore, 'readwrite', (store) => store.put({ key: 'library', value: library }));
 }
 
+function createWebPlaylistId() {
+
+  const randomId =
+    (
+      globalThis.crypto &&
+      typeof globalThis.crypto.randomUUID ===
+      'function'
+    )
+      ? globalThis.crypto.randomUUID()
+
+      : `${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}`;
+
+
+  return (
+    `web-playlist-${randomId}`
+  );
+
+}
+
 async function getCachedLibrary() {
   const record = await offlineRequest(offlineDb.dataStore, 'readonly', (store) => store.get('library'));
   return record?.value || null;
@@ -1529,46 +1550,144 @@ function pollFavoriteJob(jobId) {
 
         els.favoriteImportButton.disabled = false;
 
-        /*
- * 收藏夹目前仍由 Desktop 创建。
- * 这是解耦期间的临时兼容桥：
- * 只把刚刚导入的这个收藏夹复制到 Web，
- * 不让 Mac 的其他播放列表覆盖 Web。
- */
-        let importedPlaylist = null;
+        await loadLibrary();
 
 
         if (
-          job.status === 'complete' &&
-          job.playlistId
+          job.status === 'complete'
         ) {
 
-          try {
+          /*
+           * 现在播放列表由 Web 自己管理。
+           *
+           * Desktop 只返回：
+           * - 收藏夹名字
+           * - favoriteKey
+           * - trackIds
+           */
+          let playlist =
+            state.library.playlists.find(
+              (item) =>
+                item.sourceKey ===
+                job.favoriteKey
+            );
 
-            const serverLibrary =
-              await api('/api/library');
+
+          const now =
+            new Date()
+              .toISOString();
 
 
-            importedPlaylist =
-              serverLibrary.playlists?.find(
-                (playlist) =>
-                  playlist.id ===
-                  job.playlistId
-              ) || null;
+          /*
+           * 第一次导入这个收藏夹。
+           */
+          if (!playlist) {
 
-          } catch (error) {
+            playlist = {
 
-            console.warn(
-              '读取收藏夹播放列表失败：',
-              error
+              id:
+                createWebPlaylistId(),
+
+              name:
+                job.playlistName ||
+                'B站收藏夹',
+
+              trackIds:
+                [],
+
+              sourceKey:
+                job.favoriteKey,
+
+              source: {
+                type:
+                  'bilibili-favorite',
+
+                key:
+                  job.favoriteKey
+              },
+
+              localOnly:
+                true,
+
+              createdAt:
+                now,
+
+              updatedAt:
+                now
+            };
+
+
+            state.library.playlists.unshift(
+              playlist
             );
 
           }
 
+
+          /*
+           * 只接受确实存在于
+           * 当前 Web 音乐库里的歌曲。
+           */
+          const validTrackIds =
+            (job.trackIds || [])
+              .filter(
+                (trackId) =>
+                  state.library.tracks.some(
+                    (track) =>
+                      track.id ===
+                      trackId
+                  )
+              );
+
+
+          /*
+           * 同步收藏夹时：
+           * 保留原来的歌曲，
+           * 加入新歌曲，
+           * 不重复。
+           */
+          playlist.trackIds =
+            Array.from(
+              new Set([
+                ...playlist.trackIds,
+                ...validTrackIds
+              ])
+            );
+
+
+          playlist.updatedAt =
+            now;
+
+
+          /*
+           * 保存到 Web IndexedDB。
+           */
+          await cacheLibrary(
+            state.library
+          );
+
+
+          /*
+           * 自动打开刚刚导入的收藏夹。
+           */
+          state.selectedPlaylistId =
+            playlist.id;
+
+
+          localStorage.setItem(
+            storageKeys.selectedPlaylist,
+            playlist.id
+          );
+
+
+          setActiveView(
+            'playlists'
+          );
+
+
+          renderPlaylists();
+
         }
-
-
-        await loadLibrary();
 
 
         if (importedPlaylist) {
