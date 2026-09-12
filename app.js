@@ -1690,60 +1690,6 @@ function pollFavoriteJob(jobId) {
         }
 
 
-        if (importedPlaylist) {
-
-          const existingIndex =
-            state.library.playlists.findIndex(
-              (playlist) =>
-                playlist.id ===
-                importedPlaylist.id
-            );
-
-
-          if (existingIndex >= 0) {
-
-            /*
-             * 收藏夹再次同步时，
-             * 更新里面的歌曲，
-             * 但保留 Web 里的播放列表位置。
-             */
-            state.library.playlists[
-              existingIndex
-            ] = {
-              ...state.library.playlists[
-              existingIndex
-              ],
-              ...importedPlaylist
-            };
-
-          } else {
-
-            state.library.playlists.push(
-              importedPlaylist
-            );
-
-          }
-
-
-          await cacheLibrary(
-            state.library
-          );
-
-        }
-
-
-        if (job.playlistId) {
-          state.selectedPlaylistId = job.playlistId;
-
-          localStorage.setItem(
-            storageKeys.selectedPlaylist,
-            job.playlistId
-          );
-
-          setActiveView('playlists');
-          renderPlaylists();
-        }
-
         if (job.status === 'complete') {
           setFavoriteStatus(
             `${job.alreadyImported ? '同步完成' : '导入完成'}：${job.playlistName}` +
