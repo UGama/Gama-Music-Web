@@ -109,10 +109,54 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+
+        const copy =
+          response.clone();
+
+        caches.open(
+          CACHE_NAME
+        ).then(
+          (cache) =>
+            cache.put(
+              event.request,
+              copy
+            )
+        );
+
         return response;
+
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+      .catch(async () => {
+
+        /*
+         * 忽略 ?v=xx，
+         * 例如 app.js?v=29 也可以匹配
+         * 已缓存的 app.js。
+         */
+        const cached =
+          await caches.match(
+            event.request,
+            {
+              ignoreSearch: true
+            }
+          );
+
+        if (cached) {
+          return cached;
+        }
+
+
+        /*
+         * 页面本身断网时，
+         * 回到已经缓存的 Gama Music。
+         */
+        return caches.match(
+          './index.html',
+          {
+            ignoreSearch: true
+          }
+        );
+
+      })
   );
 });

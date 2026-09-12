@@ -534,38 +534,142 @@ function formatTime(seconds) {
 }
 
 async function loadLibrary() {
-  try {
-    const [serverLibrary, cachedLibrary] = await Promise.all([
-      api('/api/library'),
-      getCachedLibrary().catch(() => null)
-    ]);
-    const library = mergeOfflineTracks(serverLibrary, cachedLibrary);
-    state.library = library;
-    state.serverConnected = true;
-    cacheLibrary(library).catch(() => { });
-    if (state.selectedPlaylistId && !library.playlists.some((item) => item.id === state.selectedPlaylistId)) {
-      state.selectedPlaylistId = library.playlists[0]?.id || null;
-    }
-    if (!state.selectedPlaylistId && library.playlists[0]) {
-      state.selectedPlaylistId = library.playlists[0].id;
-    }
-    if (state.selectedPlaylistId) {
-      localStorage.setItem(storageKeys.selectedPlaylist, state.selectedPlaylistId);
-    }
-    setConnection(`${serverLibrary.tracks.length} 首歌，Mac 服务已连接`, true);
-    render();
-  } catch (error) {
-    state.serverConnected = false;
-    const cached = await getCachedLibrary().catch(() => null);
-    if (cached?.tracks) {
-      state.library = cached;
-      setConnection(`离线模式 · iPhone 已保存 ${state.offlineTrackIds.size} 首`, true);
-      render();
-    } else {
-      setConnection('没有连上 Mac 服务', false);
-      renderEmptyConnection(error.message);
-    }
+
+  /*
+   * Web 版首先读取本机 IndexedDB。
+   * Mac 以后只是同步来源，不再是启动 App 的前提。
+   */
+  const cachedLibrary =
+    await getCachedLibrary()
+      .catch(() => null);
+
+
+  state.library =
+    cachedLibrary || {
+      tracks: [],
+      playlists: []
+    };
+
+
+  state.serverConnected = false;
+
+
+  /*
+   * 先立刻显示本地音乐库。
+   */
+  setConnection(
+    `本地模式 · 已保存 ${state.offlineTrackIds.size} 首`,
+    true
+  );
+
+  render();
+
+
+  /*
+   * 没有主动设置 Mac 地址：
+   * Web 版就保持纯本地模式。
+   */
+  const apiBase =
+    getApiBase();
+
+  if (!apiBase) {
+    return;
   }
+
+
+  /*
+   * 设置了 Mac 地址以后，
+   * 再尝试后台同步。
+   */
+  try {
+
+    const serverLibrary =
+      await api('/api/library');
+
+
+    const library =
+      mergeOfflineTracks(
+        serverLibrary,
+        cachedLibrary
+      );
+
+
+    state.library =
+      library;
+
+    state.serverConnected =
+      true;
+
+
+    await cacheLibrary(
+      library
+    ).catch(() => { });
+
+
+    if (
+      state.selectedPlaylistId &&
+      !library.playlists.some(
+        (item) =>
+          item.id ===
+          state.selectedPlaylistId
+      )
+    ) {
+
+      state.selectedPlaylistId =
+        library.playlists[0]?.id ||
+        null;
+
+    }
+
+
+    if (
+      !state.selectedPlaylistId &&
+      library.playlists[0]
+    ) {
+
+      state.selectedPlaylistId =
+        library.playlists[0].id;
+
+    }
+
+
+    if (
+      state.selectedPlaylistId
+    ) {
+
+      localStorage.setItem(
+        storageKeys.selectedPlaylist,
+        state.selectedPlaylistId
+      );
+
+    }
+
+
+    setConnection(
+      `${serverLibrary.tracks.length} 首歌，Mac 服务已连接`,
+      true
+    );
+
+    render();
+
+  } catch (error) {
+
+    /*
+     * Mac 连接失败不影响 Web App。
+     * 继续使用本机音乐。
+     */
+    state.serverConnected =
+      false;
+
+    setConnection(
+      `本地模式 · Mac 未连接 · 已保存 ${state.offlineTrackIds.size} 首`,
+      true
+    );
+
+    render();
+
+  }
+
 }
 
 function render() {
