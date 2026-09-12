@@ -239,8 +239,8 @@ function formatBytes(bytes) {
 
   if (mb < 1024) {
     return `${mb < 10
-        ? mb.toFixed(1)
-        : Math.round(mb)
+      ? mb.toFixed(1)
+      : Math.round(mb)
       } MB`;
   }
 
@@ -2225,7 +2225,21 @@ async function savePlaylistToIphone(
 
 async function removeTrackFromIphone(trackId) {
   const track = state.library.tracks.find((item) => item.id === trackId);
-  if (!window.confirm(`删除“${track?.title || '这首歌'}”在 iPhone 上的本地副本？Mac 上的 MP3 会保留。`)) return;
+  const confirmMessage =
+    track?.localOnly
+
+      ? `从 Gama Music 删除“${track?.title || '这首歌'}”？`
+
+      : `删除“${track?.title || '这首歌'}”在这台设备上的本地副本？Mac 上的 MP3 会保留。`;
+
+
+  if (
+    !window.confirm(
+      confirmMessage
+    )
+  ) {
+    return;
+  }
 
   await deleteOfflineTrack(trackId);
   if (track?.localOnly) {
@@ -2567,165 +2581,177 @@ function openTextEditor({ title, label, value, primaryText, onSave }) {
   });
 }
 
-async function openSettings() {
+async function importLocalMp3Files(fileList) {
 
-  /*
-   * Electron Desktop 专属设置。
-   */
-  if (
-    window.gamaDesktop
-      ?.getConnectionInfo
-  ) {
+  const files =
+    Array.from(fileList || [])
+      .filter(
+        (file) =>
+          file &&
+          (
+            file.type === 'audio/mpeg' ||
+            /\.mp3$/i.test(file.name)
+          )
+      );
 
-    let info = null;
+
+  if (!files.length) {
+    throw new Error(
+      '请选择 MP3 文件。'
+    );
+  }
 
 
-    try {
+  let imported = 0;
+  let skipped = 0;
 
-      info =
-        await window.gamaDesktop
-          .getConnectionInfo();
 
-    } catch {
+  for (const file of files) {
 
-      info = null;
+    /*
+     * 用文件名 + 大小 + 修改时间判断
+     * 是否已经导入过。
+     */
+    const localFileKey =
+      `${file.name}:${file.size}:${file.lastModified}`;
 
+
+    const alreadyExists =
+      state.library.tracks.some(
+        (track) =>
+          track.localFileKey ===
+          localFileKey
+      );
+
+
+    if (alreadyExists) {
+      skipped += 1;
+      continue;
     }
 
 
-    if (info) {
-
-      openModal({
-
-        title:
-          'Gama Music 设置',
-
-        primaryText:
-          '完成',
-
-        body: `
-
-          <div class="desktop-connect-card">
-
-            <div class="desktop-connect-heading">
-
-              <strong>
-                iPhone 连接
-              </strong>
-
-              <span class="desktop-server-online">
-                ● 服务已运行
-              </span>
-
-            </div>
+    const now =
+      new Date().toISOString();
 
 
-            ${info.qrCode
-
-            ? `
-                  <div class="desktop-qr">
-
-                    <img
-                      src="${escapeHtml(info.qrCode)}"
-                      alt="iPhone 连接二维码"
-                    >
-
-                  </div>
-                `
-
-            : ''
-          }
+    const randomId =
+      (
+        globalThis.crypto &&
+        typeof globalThis.crypto.randomUUID === 'function'
+      )
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random()
+          .toString(16)
+          .slice(2)}`;
 
 
-            <p class="desktop-connect-label">
-              iPhone Safari 打开：
-            </p>
+    const track = {
+
+      id:
+        `local-${randomId}`,
+
+      title:
+        file.name
+          .replace(/\.mp3$/i, '')
+          .trim(),
+
+      uploader:
+        '本地文件',
+
+      source: {
+        type: 'local',
+        id: 'Local'
+      },
+
+      duration:
+        0,
+
+      file:
+        '',
+
+      cover:
+        null,
+
+      localOnly:
+        true,
+
+      localFileKey,
+
+      createdAt:
+        now
+    };
 
 
-            <div class="desktop-connect-url">
+    /*
+     * 真正的 MP3 文件放进 IndexedDB。
+     */
+    await putOfflineTrack({
 
-              ${escapeHtml(
-            info.lanUrl ||
-            '没有找到局域网地址'
-          )}
+      trackId:
+        track.id,
 
-            </div>
+      track,
 
+      blob:
+        file,
 
-            <p class="settings-note">
+      size:
+        file.size,
 
-              iPhone 和 Mac
-              需要连接同一个 Wi-Fi。
+      coverBlob:
+        null,
 
-            </p>
+      coverSize:
+        0,
 
-          </div>
+      savedAt:
+        now,
 
-
-          <div class="desktop-data-card">
-
-            <strong>
-              音乐数据库
-            </strong>
-
-
-            <p class="settings-note">
-
-              ${escapeHtml(
-            info.dataDir
-          )}
-
-            </p>
+      updatedAt:
+        now
+    });
 
 
-            <button
-              class="secondary-button"
-              type="button"
-              id="openDesktopDataFolder"
-            >
-              打开数据文件夹
-            </button>
-
-          </div>
-
-        `,
-
-        onPrimary:
-          async () => { }
-
-      });
+    /*
+     * 歌曲信息放进本地音乐库。
+     */
+    state.library.tracks.push(
+      track
+    );
 
 
-      const openDataButton =
-        document.querySelector(
-          '#openDesktopDataFolder'
-        );
-
-
-      openDataButton
-        ?.addEventListener(
-          'click',
-          () => {
-
-            window.gamaDesktop
-              .openDataFolder();
-
-          }
-        );
-
-
-      return;
-
-    }
-
+    imported += 1;
   }
 
 
   /*
-   * iPhone / 普通浏览器保持原来的设置。
+   * 保存音乐库。
    */
+  await cacheLibrary(
+    state.library
+  );
+
+
+  /*
+   * 重新读取本地歌曲状态。
+   */
+  await refreshOfflineState();
+
+
+  render();
+
+
+  return {
+    imported,
+    skipped
+  };
+}
+
+function openSettings() {
+
   const current =
     getApiBase();
+
 
   const isHttpsPage =
     location.protocol === 'https:';
@@ -2734,12 +2760,39 @@ async function openSettings() {
   openModal({
 
     title:
-      '连接设置',
+      'Gama Music 设置',
 
     primaryText:
       '保存',
 
     body: `
+
+      <label class="field">
+
+        <span>
+          导入本地 MP3
+        </span>
+
+        <input
+          id="localMp3Input"
+          type="file"
+          accept=".mp3,audio/mpeg"
+          multiple
+        >
+
+      </label>
+
+
+      <p
+        id="localImportStatus"
+        class="settings-note"
+      >
+        MP3 会保存在这台设备的 Gama Music 本地存储中。
+      </p>
+
+
+      <hr>
+
 
       <label class="field">
 
@@ -2750,7 +2803,7 @@ async function openSettings() {
         <input
           id="apiBaseInput"
           type="url"
-          placeholder="留空则使用当前地址，例如 http://192.168.1.10:7330"
+          placeholder="可选"
           value="${escapeHtml(current)}"
         >
 
@@ -2758,31 +2811,23 @@ async function openSettings() {
 
 
       <p class="settings-note">
-
-        如果这个页面放在
-        GitHub Pages 上，
-        通常需要 HTTPS 的
-        Mac 服务地址或隧道地址。
-
+        Mac 地址可以留空。
+        留空时 Gama Music Web 完全使用本地音乐库。
       </p>
 
 
       ${isHttpsPage
-
         ? `
             <p class="settings-note">
-
-              当前页面是 HTTPS。
-              如果填写 http:// 地址，
-              Safari 可能会拦截。
-
+              当前页面使用 HTTPS。
+              HTTP Mac 地址可能被 Safari 阻止。
             </p>
           `
-
         : ''
       }
 
     `,
+
 
     onPrimary:
       async () => {
@@ -2815,6 +2860,74 @@ async function openSettings() {
       }
 
   });
+
+
+  /*
+   * 本地 MP3 导入。
+   */
+  const input =
+    $('#localMp3Input');
+
+
+  const status =
+    $('#localImportStatus');
+
+
+  input?.addEventListener(
+    'change',
+
+    async () => {
+
+      if (
+        !input.files ||
+        !input.files.length
+      ) {
+        return;
+      }
+
+
+      input.disabled =
+        true;
+
+
+      status.textContent =
+        '正在导入 MP3……';
+
+
+      try {
+
+        const result =
+          await importLocalMp3Files(
+            input.files
+          );
+
+
+        status.textContent =
+          `导入完成：${result.imported} 首` +
+          (
+            result.skipped
+              ? ` · 跳过重复 ${result.skipped} 首`
+              : ''
+          );
+
+
+      } catch (error) {
+
+        status.textContent =
+          `导入失败：${error.message}`;
+
+      } finally {
+
+        input.disabled =
+          false;
+
+        input.value =
+          '';
+
+      }
+
+    }
+  );
 
 }
 
