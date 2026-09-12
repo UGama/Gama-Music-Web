@@ -1250,6 +1250,15 @@ function setActiveView(view) {
 }
 
 async function previewVideo() {
+
+  if (!getApiBase()) {
+    setStatus(
+      'Web 版不能直接从 Bilibili 下载。请使用本地 MP3 导入，或以后连接 Mac 服务。',
+      'warning'
+    );
+    return;
+  }
+
   const url = els.urlInput.value.trim();
   if (!url) {
     setStatus('请先输入 Bilibili 视频 URL。', 'warning');
@@ -1292,6 +1301,13 @@ async function previewVideo() {
 
 async function startDownload(event) {
   event.preventDefault();
+  if (!getApiBase()) {
+    setStatus(
+      'Web 版不能直接下载 Bilibili MP3。请使用本地 MP3 导入，或连接 Mac 服务。',
+      'warning'
+    );
+    return;
+  }
   const url = els.urlInput.value.trim();
   const title = els.titleInput.value.trim();
   if (!url) {

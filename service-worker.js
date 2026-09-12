@@ -1,16 +1,16 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v29';
+const CACHE_NAME = 'gama-music-shell-v30';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.webmanifest',
-  './assets/icon.svg?v=29',
-  './assets/icon-192.png?v=29',
-  './assets/icon-512.png?v=29',
-  './assets/apple-touch-icon.png?v=29',
+  './assets/icon.svg?v=30',
+  './assets/icon-192.png?v=30',
+  './assets/icon-512.png?v=30',
+  './assets/apple-touch-icon.png?v=30',
   './assets/playlist/cat.svg',
   './assets/playlist/dog.svg',
   './assets/playlist/panda.svg',
@@ -130,7 +130,7 @@ self.addEventListener('fetch', (event) => {
 
         /*
          * 忽略 ?v=xx，
-         * 例如 app.js?v=29 也可以匹配
+         * 例如 app.js?v=30 也可以匹配
          * 已缓存的 app.js。
          */
         const cached =
