@@ -795,32 +795,32 @@ function renderTrackCards(
         `;
 
 
-    const managementButtons =
-      track.localOnly
-        ? ''
-        : `
-          <button
-            class="mini-button"
-            type="button"
-            data-action="add-track"
-            data-track-id="${track.id}"
-            aria-label="加入播放列表"
-          >
-            ${icon('add')}
-          </button>
+    const managementButtons = `
+  <button
+    class="mini-button"
+    type="button"
+    data-action="add-track"
+    data-track-id="${track.id}"
+    aria-label="加入播放列表"
+  >
+    ${icon('add')}
+  </button>
 
-          <button
-            class="mini-button"
-            type="button"
-            data-action="rename-track"
-            data-track-id="${track.id}"
-            aria-label="改名"
-          >
-            ${icon('edit')}
-          </button>
+  <button
+    class="mini-button"
+    type="button"
+    data-action="rename-track"
+    data-track-id="${track.id}"
+    aria-label="改名"
+  >
+    ${icon('edit')}
+  </button>
 
-          ${removeButton}
-        `;
+  ${options.playlistId || !track.localOnly
+        ? removeButton
+        : ''
+      }
+`;
 
 
     return `
@@ -2947,60 +2947,275 @@ function openSettings() {
 
 }
 
+function createLocalId(prefix) {
+
+  const randomId =
+    (
+      globalThis.crypto &&
+      typeof globalThis.crypto.randomUUID === 'function'
+    )
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}`;
+
+  return `${prefix}-${randomId}`;
+}
+
+
+async function saveLocalLibrary() {
+
+  await cacheLibrary(
+    state.library
+  );
+
+  render();
+}
+
+
 function openPlaylistPicker(trackId) {
+
+  /*
+   * 还没有播放列表：
+   * 直接创建一个本地播放列表并加入歌曲。
+   */
   if (!state.library.playlists.length) {
+
     openTextEditor({
-      title: '创建播放列表',
-      label: '名称',
-      value: '开车听',
-      primaryText: '创建并加入',
-      onSave: async (name) => {
-        const { playlist } = await api('/api/playlists', { method: 'POST', body: { name } });
-        await api(`/api/playlists/${encodeURIComponent(playlist.id)}/tracks`, { method: 'POST', body: { trackId } });
-        state.selectedPlaylistId = playlist.id;
-        localStorage.setItem(storageKeys.selectedPlaylist, playlist.id);
-        await loadLibrary();
-      }
+
+      title:
+        '创建播放列表',
+
+      label:
+        '名称',
+
+      value:
+        '开车听',
+
+      primaryText:
+        '创建并加入',
+
+      onSave:
+        async (name) => {
+
+          const now =
+            new Date().toISOString();
+
+
+          const playlist = {
+
+            id:
+              createLocalId(
+                'local-playlist'
+              ),
+
+            name,
+
+            trackIds: [
+              trackId
+            ],
+
+            localOnly:
+              true,
+
+            createdAt:
+              now,
+
+            updatedAt:
+              now
+          };
+
+
+          state.library.playlists.push(
+            playlist
+          );
+
+
+          state.selectedPlaylistId =
+            playlist.id;
+
+
+          localStorage.setItem(
+            storageKeys.selectedPlaylist,
+            playlist.id
+          );
+
+
+          await saveLocalLibrary();
+
+        }
+
     });
+
     return;
   }
 
+
+  /*
+   * 已经有播放列表：
+   * 让用户选择加入哪个。
+   */
   openModal({
-    title: '加入播放列表',
-    primaryText: '关闭',
+
+    title:
+      '加入播放列表',
+
+    primaryText:
+      '关闭',
+
     body: `
       <div class="choice-list">
-        ${state.library.playlists.map((playlist) => `
-          <button type="button" data-picker-playlist="${playlist.id}">
-            ${escapeHtml(playlist.name)}
-          </button>
-        `).join('')}
+
+        ${state.library.playlists
+        .map(
+          (playlist) => `
+              <button
+                type="button"
+                data-picker-playlist="${playlist.id}"
+              >
+                ${escapeHtml(playlist.name)}
+              </button>
+            `
+        )
+        .join('')}
+
       </div>
     `,
-    onPrimary: async () => { }
+
+    onPrimary:
+      async () => { }
+
   });
 
-  els.modalBody.querySelectorAll('[data-picker-playlist]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      await api(`/api/playlists/${encodeURIComponent(button.dataset.pickerPlaylist)}/tracks`, {
-        method: 'POST',
-        body: { trackId }
-      });
-      closeModal();
-      await loadLibrary();
-    });
-  });
+
+  els.modalBody
+    .querySelectorAll(
+      '[data-picker-playlist]'
+    )
+    .forEach(
+      (button) => {
+
+        button.addEventListener(
+          'click',
+
+          async () => {
+
+            const playlist =
+              state.library.playlists.find(
+                (item) =>
+                  item.id ===
+                  button.dataset.pickerPlaylist
+              );
+
+
+            if (!playlist) {
+              return;
+            }
+
+
+            if (
+              !playlist.trackIds.includes(
+                trackId
+              )
+            ) {
+
+              playlist.trackIds.push(
+                trackId
+              );
+
+              playlist.updatedAt =
+                new Date().toISOString();
+
+            }
+
+
+            state.selectedPlaylistId =
+              playlist.id;
+
+
+            localStorage.setItem(
+              storageKeys.selectedPlaylist,
+              playlist.id
+            );
+
+
+            await saveLocalLibrary();
+
+            closeModal();
+
+          }
+
+        );
+
+      }
+    );
 }
 
+
 async function createPlaylist(event) {
+
   event.preventDefault();
-  const name = els.playlistNameInput.value.trim();
-  if (!name) return;
-  const { playlist } = await api('/api/playlists', { method: 'POST', body: { name } });
-  els.playlistNameInput.value = '';
-  state.selectedPlaylistId = playlist.id;
-  localStorage.setItem(storageKeys.selectedPlaylist, playlist.id);
-  await loadLibrary();
+
+
+  const name =
+    els.playlistNameInput
+      .value
+      .trim();
+
+
+  if (!name) {
+    return;
+  }
+
+
+  const now =
+    new Date().toISOString();
+
+
+  const playlist = {
+
+    id:
+      createLocalId(
+        'local-playlist'
+      ),
+
+    name,
+
+    trackIds:
+      [],
+
+    localOnly:
+      true,
+
+    createdAt:
+      now,
+
+    updatedAt:
+      now
+  };
+
+
+  state.library.playlists.push(
+    playlist
+  );
+
+
+  els.playlistNameInput.value =
+    '';
+
+
+  state.selectedPlaylistId =
+    playlist.id;
+
+
+  localStorage.setItem(
+    storageKeys.selectedPlaylist,
+    playlist.id
+  );
+
+
+  await saveLocalLibrary();
+
 }
 
 async function handleAction(event) {
@@ -3045,18 +3260,79 @@ async function handleAction(event) {
   }
 
   if (action === 'rename-track') {
-    const track = state.library.tracks.find((item) => item.id === trackId);
-    if (!track) return;
+
+    const track =
+      state.library.tracks.find(
+        (item) =>
+          item.id === trackId
+      );
+
+
+    if (!track) {
+      return;
+    }
+
+
     openTextEditor({
-      title: '修改歌名',
-      label: '歌名',
-      value: track.title,
-      primaryText: '保存',
-      onSave: async (title) => {
-        await api(`/api/tracks/${encodeURIComponent(track.id)}`, { method: 'PATCH', body: { title } });
-        await loadLibrary();
-      }
+
+      title:
+        '修改歌名',
+
+      label:
+        '歌名',
+
+      value:
+        track.title,
+
+      primaryText:
+        '保存',
+
+      onSave:
+        async (title) => {
+
+          track.title =
+            title;
+
+
+          track.updatedAt =
+            new Date().toISOString();
+
+
+          /*
+           * 如果 MP3 本身已经存在 IndexedDB，
+           * 同时更新里面保存的歌曲信息。
+           */
+          const saved =
+            await getOfflineTrack(
+              track.id
+            ).catch(() => null);
+
+
+          if (saved) {
+
+            await putOfflineTrack({
+
+              ...saved,
+
+              track: {
+                ...(saved.track || track),
+                title
+              },
+
+              updatedAt:
+                new Date().toISOString()
+
+            });
+
+          }
+
+
+          await saveLocalLibrary();
+
+        }
+
     });
+
   }
 
   if (action === 'delete-track') {
@@ -3099,30 +3375,133 @@ async function handleAction(event) {
   }
 
   if (action === 'rename-playlist') {
-    const playlist = state.library.playlists.find((item) => item.id === playlistId);
-    if (!playlist) return;
+
+    const playlist =
+      state.library.playlists.find(
+        (item) =>
+          item.id === playlistId
+      );
+
+
+    if (!playlist) {
+      return;
+    }
+
+
     openTextEditor({
-      title: '修改播放列表',
-      label: '名称',
-      value: playlist.name,
-      primaryText: '保存',
-      onSave: async (name) => {
-        await api(`/api/playlists/${encodeURIComponent(playlist.id)}`, { method: 'PATCH', body: { name } });
-        await loadLibrary();
-      }
+
+      title:
+        '修改播放列表',
+
+      label:
+        '名称',
+
+      value:
+        playlist.name,
+
+      primaryText:
+        '保存',
+
+      onSave:
+        async (name) => {
+
+          playlist.name =
+            name;
+
+          playlist.updatedAt =
+            new Date().toISOString();
+
+          await saveLocalLibrary();
+
+        }
+
     });
+
   }
 
   if (action === 'delete-playlist') {
-    if (!window.confirm('删除这个播放列表？歌曲文件会保留。')) return;
-    await api(`/api/playlists/${encodeURIComponent(playlistId)}`, { method: 'DELETE' });
-    if (state.selectedPlaylistId === playlistId) state.selectedPlaylistId = null;
-    await loadLibrary();
+
+    if (
+      !window.confirm(
+        '删除这个播放列表？歌曲文件会保留。'
+      )
+    ) {
+      return;
+    }
+
+
+    state.library.playlists =
+      state.library.playlists.filter(
+        (playlist) =>
+          playlist.id !== playlistId
+      );
+
+
+    if (
+      state.selectedPlaylistId ===
+      playlistId
+    ) {
+
+      state.selectedPlaylistId =
+        state.library.playlists[0]?.id ||
+        null;
+
+
+      if (
+        state.selectedPlaylistId
+      ) {
+
+        localStorage.setItem(
+          storageKeys.selectedPlaylist,
+          state.selectedPlaylistId
+        );
+
+      } else {
+
+        localStorage.removeItem(
+          storageKeys.selectedPlaylist
+        );
+
+      }
+
+    }
+
+
+    state.mobilePlaylistDetailOpen =
+      false;
+
+
+    await saveLocalLibrary();
+
   }
 
   if (action === 'remove-from-playlist') {
-    await api(`/api/playlists/${encodeURIComponent(playlistId)}/tracks/${encodeURIComponent(trackId)}`, { method: 'DELETE' });
-    await loadLibrary();
+
+    const playlist =
+      state.library.playlists.find(
+        (item) =>
+          item.id === playlistId
+      );
+
+
+    if (!playlist) {
+      return;
+    }
+
+
+    playlist.trackIds =
+      playlist.trackIds.filter(
+        (id) =>
+          id !== trackId
+      );
+
+
+    playlist.updatedAt =
+      new Date().toISOString();
+
+
+    await saveLocalLibrary();
+
   }
 
   if (action === 'show-add-to-selected') {
@@ -3130,10 +3509,35 @@ async function handleAction(event) {
   }
 
   if (action === 'add-track-to-selected') {
-    const playlist = getSelectedPlaylist();
-    if (!playlist) return;
-    await api(`/api/playlists/${encodeURIComponent(playlist.id)}/tracks`, { method: 'POST', body: { trackId } });
-    await loadLibrary();
+
+    const playlist =
+      getSelectedPlaylist();
+
+
+    if (!playlist) {
+      return;
+    }
+
+
+    if (
+      !playlist.trackIds.includes(
+        trackId
+      )
+    ) {
+
+      playlist.trackIds.push(
+        trackId
+      );
+
+
+      playlist.updatedAt =
+        new Date().toISOString();
+
+    }
+
+
+    await saveLocalLibrary();
+
   }
 }
 
