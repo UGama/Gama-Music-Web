@@ -1799,17 +1799,87 @@ async function saveDownloadedTrackToWeb(
 ) {
 
   if (!track) {
+
     throw new Error(
       '下载完成，但没有收到歌曲信息。'
     );
+
   }
 
 
   /*
-   * 尽量请求浏览器把 Gama Music
-   * 的本地数据设为持久存储。
+   * 先把歌曲登记进 Web 自己的音乐库。
+   *
+   * 从这一刻开始，
+   * Web 才是歌曲真正的拥有者。
    */
-  if (navigator.storage?.persist) {
+  const existingIndex =
+    state.library.tracks.findIndex(
+      (item) =>
+        item.id === track.id
+    );
+
+
+  let webTrack;
+
+
+  if (
+    existingIndex === -1
+  ) {
+
+    webTrack = {
+      ...track,
+      localOnly: true
+    };
+
+
+    state.library.tracks.unshift(
+      webTrack
+    );
+
+  } else {
+
+    const existing =
+      state.library.tracks[
+      existingIndex
+      ];
+
+
+    webTrack = {
+      ...existing,
+      ...track,
+
+      /*
+       * 用户如果已经在 Web 改过名字，
+       * 不让 Desktop 再覆盖。
+       */
+      title:
+        existing.title ||
+        track.title,
+
+      localOnly:
+        true
+    };
+
+
+    state.library.tracks[
+      existingIndex
+    ] = webTrack;
+
+  }
+
+
+  /*
+   * 先保存歌曲目录。
+   */
+  await cacheLibrary(
+    state.library
+  ).catch(() => { });
+
+
+  if (
+    navigator.storage?.persist
+  ) {
 
     await navigator.storage
       .persist()
@@ -1819,19 +1889,17 @@ async function saveDownloadedTrackToWeb(
 
 
   /*
-   * Desktop 现在仍然暂时保存了一份 MP3，
-   * Web 从 Desktop 把 MP3 + 封面取回来，
-   * 真正写进自己的 IndexedDB。
+   * 再把 MP3 + 封面真正复制进 IndexedDB。
    */
   const result =
     await saveTrackBlobToIphone(
 
-      track,
+      webTrack,
 
       (percent) => {
 
         const displayPercent =
-          track.cover
+          webTrack.cover
             ? Math.round(
               percent * 0.95
             )
@@ -1839,7 +1907,7 @@ async function saveDownloadedTrackToWeb(
 
 
         setStatus(
-          `正在保存到 Web 本地：${track.title} · ${percent}%`,
+          `正在保存到 Web 本地：${webTrack.title} · ${percent}%`,
           'info',
           displayPercent
         );
@@ -1849,12 +1917,11 @@ async function saveDownloadedTrackToWeb(
       (stage) => {
 
         if (
-          stage ===
-          'cover'
+          stage === 'cover'
         ) {
 
           setStatus(
-            `正在保存封面到 Web 本地：${track.title}`,
+            `正在保存封面到 Web 本地：${webTrack.title}`,
             'info',
             97
           );
@@ -1866,11 +1933,15 @@ async function saveDownloadedTrackToWeb(
     );
 
 
-  /*
-   * 重新读取 IndexedDB 状态，
-   * 让歌曲马上显示“本地”标记。
-   */
   await refreshOfflineState();
+
+
+  await cacheLibrary(
+    state.library
+  ).catch(() => { });
+
+
+  render();
 
 
   return result;
@@ -2766,7 +2837,13 @@ async function saveTrackBlobToIphone(
 
     track: {
       ...track,
-      localOnly: false
+
+      /*
+       * Web 自己拥有的歌曲保持 localOnly。
+       * 旧 Desktop 歌曲仍然默认 false。
+       */
+      localOnly:
+        track.localOnly === true
     },
 
     blob: audioBlob,
