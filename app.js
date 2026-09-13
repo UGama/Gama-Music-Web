@@ -1794,6 +1794,89 @@ async function startDownload(event) {
   }
 }
 
+async function saveDownloadedTrackToWeb(
+  track
+) {
+
+  if (!track) {
+    throw new Error(
+      '下载完成，但没有收到歌曲信息。'
+    );
+  }
+
+
+  /*
+   * 尽量请求浏览器把 Gama Music
+   * 的本地数据设为持久存储。
+   */
+  if (navigator.storage?.persist) {
+
+    await navigator.storage
+      .persist()
+      .catch(() => false);
+
+  }
+
+
+  /*
+   * Desktop 现在仍然暂时保存了一份 MP3，
+   * Web 从 Desktop 把 MP3 + 封面取回来，
+   * 真正写进自己的 IndexedDB。
+   */
+  const result =
+    await saveTrackBlobToIphone(
+
+      track,
+
+      (percent) => {
+
+        const displayPercent =
+          track.cover
+            ? Math.round(
+              percent * 0.95
+            )
+            : percent;
+
+
+        setStatus(
+          `正在保存到 Web 本地：${track.title} · ${percent}%`,
+          'info',
+          displayPercent
+        );
+
+      },
+
+      (stage) => {
+
+        if (
+          stage ===
+          'cover'
+        ) {
+
+          setStatus(
+            `正在保存封面到 Web 本地：${track.title}`,
+            'info',
+            97
+          );
+
+        }
+
+      }
+
+    );
+
+
+  /*
+   * 重新读取 IndexedDB 状态，
+   * 让歌曲马上显示“本地”标记。
+   */
+  await refreshOfflineState();
+
+
+  return result;
+
+}
+
 function pollJob(jobId) {
   window.clearInterval(state.jobTimer);
 
@@ -1808,37 +1891,81 @@ function pollJob(jobId) {
         els.previewButton.disabled = false;
 
         if (job.status === 'complete') {
+
           els.urlInput.value = '';
           els.titleInput.value = '';
 
           state.preview = null;
           state.previewUrl = '';
 
+
+          /*
+           * Desktop 下载完成以后，
+           * 立即把歌曲复制进这个 Web
+           * 自己的 IndexedDB。
+           */
+          const localResult =
+            await saveDownloadedTrackToWeb(
+              job.track
+            );
+
+
+          /*
+           * 再同步歌曲信息。
+           *
+           * 当前阶段 Desktop 仍然保留原音乐库，
+           * 所以这里暂时继续 loadLibrary。
+           */
           await loadLibrary();
 
+
           setStatus(
-            `下载完成：${job.track.title}`,
-            'info',
+            localResult.coverStatus ===
+              'failed'
+              ? `下载完成并已保存到 Web 本地：${job.track.title} · 封面保存失败`
+              : `下载完成并已保存到 Web 本地：${job.track.title}`,
+            localResult.coverStatus ===
+              'failed'
+              ? 'warning'
+              : 'info',
             100
           );
+
         }
 
 
         if (job.status === 'duplicate') {
-          /*
-           * 即使 MP3 重复，
-           * 后端可能刚刚补好了封面，
-           * 所以必须重新载入音乐库。
-           */
+
+          const existingTrack =
+            job.existingTrack;
+
+
+          if (existingTrack) {
+
+            /*
+             * Desktop 有这首歌，
+             * 但当前 Web 不一定有。
+             *
+             * 所以仍然把它复制进 Web 本地库。
+             */
+            await saveDownloadedTrackToWeb(
+              existingTrack
+            );
+
+          }
+
+
           await loadLibrary();
 
+
           setStatus(
-            job.existingTrack?.cover
-              ? `歌曲已经存在，MP3 已跳过，封面已检查：${job.existingTrack.title}`
-              : `歌曲已经存在，MP3 已跳过：${job.existingTrack?.title || ''}`,
+            existingTrack
+              ? `歌曲已存在于 Desktop，并已保存到 Web 本地：${existingTrack.title}`
+              : '歌曲已经存在。',
             'info',
             100
           );
+
         }
       }
     } catch (error) {
@@ -1888,6 +2015,172 @@ async function startFavoriteImport(event) {
   }
 }
 
+async function saveFavoriteTracksToWeb(
+  trackIds,
+  playlistName
+) {
+
+  const ids =
+    Array.from(
+      new Set(
+        trackIds || []
+      )
+    );
+
+
+  if (!ids.length) {
+
+    return {
+      saved: 0,
+      skipped: 0,
+      failed: 0
+    };
+
+  }
+
+
+  if (navigator.storage?.persist) {
+
+    await navigator.storage
+      .persist()
+      .catch(() => false);
+
+  }
+
+
+  let saved = 0;
+  let skipped = 0;
+  let failed = 0;
+
+
+  for (
+    let index = 0;
+    index < ids.length;
+    index += 1
+  ) {
+
+    const trackId =
+      ids[index];
+
+
+    const track =
+      state.library.tracks.find(
+        (item) =>
+          item.id === trackId
+      );
+
+
+    if (!track) {
+
+      failed += 1;
+      continue;
+
+    }
+
+
+    try {
+
+      const result =
+        await saveTrackBlobToIphone(
+
+          track,
+
+          (percent) => {
+
+            const progress =
+              Math.round(
+                (
+                  index +
+                  percent / 100
+                ) /
+                ids.length *
+                100
+              );
+
+
+            setFavoriteStatus(
+              `正在保存到 Web 本地` +
+              ` · ${playlistName}` +
+              ` · ${index + 1}/${ids.length}` +
+              ` · ${track.title}`,
+              'info',
+              progress
+            );
+
+          },
+
+          (stage) => {
+
+            if (
+              stage === 'cover'
+            ) {
+
+              const progress =
+                Math.round(
+                  (
+                    index +
+                    0.97
+                  ) /
+                  ids.length *
+                  100
+                );
+
+
+              setFavoriteStatus(
+                `正在保存封面` +
+                ` · ${index + 1}/${ids.length}` +
+                ` · ${track.title}`,
+                'info',
+                progress
+              );
+
+            }
+
+          }
+
+        );
+
+
+      if (
+        result.audioStatus ===
+        'saved'
+      ) {
+
+        saved += 1;
+
+      } else {
+
+        skipped += 1;
+
+      }
+
+    } catch (error) {
+
+      failed += 1;
+
+      console.error(
+        '收藏夹歌曲保存到 Web 失败：',
+        track.title,
+        error
+      );
+
+    }
+
+  }
+
+
+  await refreshOfflineState();
+
+  render();
+
+
+  return {
+    saved,
+    skipped,
+    failed
+  };
+
+}
 
 function pollFavoriteJob(jobId) {
   window.clearInterval(state.favoriteJobTimer);
@@ -1924,9 +2217,25 @@ function pollFavoriteJob(jobId) {
         await loadLibrary();
 
 
+        let localSync =
+          null;
+
+
         if (
           job.status === 'complete'
         ) {
+
+          /*
+           * Desktop 完成整个收藏夹下载以后，
+           * 把所有歌曲真正复制到
+           * 当前 Web 的 IndexedDB。
+           */
+          localSync =
+            await saveFavoriteTracksToWeb(
+              job.trackIds,
+              job.playlistName ||
+              'B站收藏夹'
+            );
 
           /*
            * 现在播放列表由 Web 自己管理。
@@ -2064,12 +2373,22 @@ function pollFavoriteJob(jobId) {
         if (job.status === 'complete') {
           setFavoriteStatus(
             `同步完成：${job.playlistName}` +
-            ` · 新下载 ${job.downloaded} 首` +
-            ` · 已有 ${job.duplicates} 首` +
-            (job.failed
-              ? ` · 失败 ${job.failed} 首`
-              : ''),
-            job.failed
+            ` · Web 本地新增 ${localSync?.saved || 0} 首` +
+            ` · 本地已有 ${localSync?.skipped || 0} 首` +
+            (
+              localSync?.failed
+                ? ` · 本地保存失败 ${localSync.failed} 首`
+                : ''
+            ) +
+            (
+              job.failed
+                ? ` · B站下载失败 ${job.failed} 首`
+                : ''
+            ),
+            (
+              job.failed ||
+              localSync?.failed
+            )
               ? 'warning'
               : 'info',
             100
