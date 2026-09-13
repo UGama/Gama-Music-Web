@@ -27,6 +27,10 @@ const state = {
   favoriteJobTimer: null,
   isSeeking: false,
   serverConnected: false,
+
+  serverCheckTimer: null,
+  serverCheckBusy: false,
+
   offlineTrackIds: new Set(),
   offlineCoverUrls: new Map(),
   offlineUsage: 0,
@@ -827,6 +831,165 @@ async function loadLibrary() {
     render();
 
   }
+
+}
+
+async function checkServerConnection() {
+
+  /*
+   * 没有设置 Mac 服务地址，
+   * 就保持纯本地模式。
+   */
+  if (!getApiBase()) {
+    return;
+  }
+
+
+  /*
+   * 页面在后台时不需要持续检查。
+   */
+  if (document.hidden) {
+    return;
+  }
+
+
+  /*
+   * 防止上一次检查还没结束，
+   * 下一次又开始。
+   */
+  if (state.serverCheckBusy) {
+    return;
+  }
+
+
+  state.serverCheckBusy =
+    true;
+
+
+  const controller =
+    new AbortController();
+
+
+  /*
+   * Server 5 秒没有响应，
+   * 就认为这次连接失败。
+   */
+  const timeout =
+    window.setTimeout(
+      () => {
+        controller.abort();
+      },
+      5000
+    );
+
+
+  try {
+
+    await api(
+      '/api/health',
+      {
+        signal:
+          controller.signal
+      }
+    );
+
+
+    /*
+     * Server 以前没连接，
+     * 现在重新上线了。
+     *
+     * 重新载入整个音乐库。
+     */
+    if (!state.serverConnected) {
+
+      await loadLibrary();
+
+    }
+
+  } catch {
+
+    /*
+     * Server 原来在线，
+     * 现在掉线了。
+     */
+    if (state.serverConnected) {
+
+      state.serverConnected =
+        false;
+
+
+      setConnection(
+        `本地模式 · Mac 未连接 · 已保存 ${state.offlineTrackIds.size} 首`,
+        true
+      );
+
+
+      render();
+
+    }
+
+  } finally {
+
+    window.clearTimeout(
+      timeout
+    );
+
+
+    state.serverCheckBusy =
+      false;
+
+  }
+
+}
+
+
+function startServerConnectionMonitor() {
+
+  if (state.serverCheckTimer) {
+
+    window.clearInterval(
+      state.serverCheckTimer
+    );
+
+  }
+
+
+  /*
+   * 每 15 秒检查一次 Mac Server。
+   */
+  state.serverCheckTimer =
+    window.setInterval(
+      checkServerConnection,
+      15000
+    );
+
+
+  /*
+   * 网络重新连接时立即检查，
+   * 不需要等 15 秒。
+   */
+  window.addEventListener(
+    'online',
+    checkServerConnection
+  );
+
+
+  /*
+   * 从后台重新回到 Gama Music 时，
+   * 也立即检查一次。
+   */
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+
+      if (!document.hidden) {
+
+        checkServerConnection();
+
+      }
+
+    }
+  );
 
 }
 
@@ -4748,4 +4911,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerServiceWorker();
   await refreshOfflineState();
   await loadLibrary();
+
+  startServerConnectionMonitor();
 });
