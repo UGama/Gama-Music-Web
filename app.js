@@ -1712,6 +1712,51 @@ function setActiveView(view) {
   els.playlistsView.classList.toggle('hidden', view !== 'playlists');
 }
 
+function findWebDuplicateBySource(
+  source
+) {
+
+  if (!source) {
+    return null;
+  }
+
+
+  const incomingKeys =
+    new Set(
+      [
+        source.key,
+        ...(source.keys || [])
+      ]
+        .filter(Boolean)
+        .map(String)
+    );
+
+
+  return (
+    state.library.tracks.find(
+      (track) => {
+
+        const trackKeys =
+          [
+            track.sourceKey,
+            track.source?.key,
+            ...(track.source?.keys || [])
+          ]
+            .filter(Boolean)
+            .map(String);
+
+
+        return trackKeys.some(
+          (key) =>
+            incomingKeys.has(key)
+        );
+
+      }
+    ) || null
+  );
+
+}
+
 async function previewVideo() {
 
   if (!getApiBase()) {
@@ -1740,10 +1785,20 @@ async function previewVideo() {
       els.titleInput.value = preview.title || '';
     }
 
-    if (preview.duplicate) {
+    const webDuplicate =
+      findWebDuplicateBySource(
+        preview.source
+      );
+
+
+    preview.webDuplicate =
+      webDuplicate;
+
+
+    if (webDuplicate) {
 
       setStatus(
-        `歌曲已经存在：${preview.existingTrack.title}。再次提交不会重复下载 MP3，只会检查并补齐封面。`,
+        `这首歌已经在当前 Web 音乐库中：${webDuplicate.title}`,
         'info'
       );
 
@@ -1778,6 +1833,34 @@ async function startDownload(event) {
     return;
   }
 
+  /*
+ * 如果刚刚预览过同一个 URL，
+ * 再用 Web 自己的音乐库检查一次。
+ */
+  if (
+    state.preview &&
+    state.previewUrl === url
+  ) {
+
+    const existingTrack =
+      findWebDuplicateBySource(
+        state.preview.source
+      );
+
+
+    if (existingTrack) {
+
+      setStatus(
+        `这首歌已经在当前 Web 音乐库中：${existingTrack.title}`,
+        'info',
+        100
+      );
+
+      return;
+
+    }
+
+  }
 
 
   els.downloadButton.disabled = true;
