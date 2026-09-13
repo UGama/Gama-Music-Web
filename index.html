@@ -12,7 +12,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png?v=30">
   <link rel="icon" href="./assets/icon.svg?v=30" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=32">
+  <link rel="stylesheet" href="./styles.css?v=40">
 </head>
 
 <body>
@@ -22,7 +22,7 @@
         <img src="./assets/icon.svg?v=30" alt="" width="40" height="40">
         <div>
           <p class="brand-name">Gama Music</p>
-          <p class="brand-subtitle" id="connectionText">正在连接 Mac 服务</p>
+          <p class="brand-subtitle" id="connectionText">正在载入音乐库</p>
         </div>
       </div>
       <button class="icon-button" id="settingsButton" type="button" aria-label="设置">
@@ -126,11 +126,39 @@
         <div id="playlistSaveStatus" class="playlist-save-jobs" aria-label="播放列表保存进度" hidden></div>
         <div id="libraryView" class="view-pane">
           <div class="toolbar-row">
+
             <label class="search-field">
               <span class="sr-only">搜索歌曲</span>
+
               <input id="searchInput" type="search" placeholder="搜索歌曲">
             </label>
-            <button class="secondary-button compact" type="button" id="playAllButton">播放全部</button>
+
+
+            <select id="trackSortSelect" class="track-sort-select" aria-label="歌曲排序">
+
+              <option value="newest">
+                最新添加
+              </option>
+
+              <option value="oldest">
+                最早添加
+              </option>
+
+              <option value="az">
+                歌名 A-Z
+              </option>
+
+              <option value="za">
+                歌名 Z-A
+              </option>
+
+            </select>
+
+
+            <button class="secondary-button compact" type="button" id="playAllButton">
+              播放全部
+            </button>
+
           </div>
           <div class="offline-summary" id="offlineSummary">本地：正在检查</div>
           <div id="trackList" class="track-list"></div>
@@ -229,7 +257,7 @@
     </div>
   </div>
 
-  <script src="./app.js?v=38" defer></script>
+  <script src="./app.js?v=40" defer></script>
 </body>
 
 </html>

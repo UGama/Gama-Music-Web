@@ -3,7 +3,9 @@
 const storageKeys = {
   apiBase: 'gamaMusic.apiBase',
   mode: 'gamaMusic.mode',
-  selectedPlaylist: 'gamaMusic.selectedPlaylist'
+  selectedPlaylist: 'gamaMusic.selectedPlaylist',
+  trackSort: 'gamaMusic.trackSort',
+  sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt'
 };
 
 const offlineDb = {
@@ -21,12 +23,25 @@ const state = {
   activeView: 'library',
   mobilePlaylistDetailOpen: false,
   mode: localStorage.getItem(storageKeys.mode) || 'loop',
+  trackSort:
+    localStorage.getItem(
+      storageKeys.trackSort
+    ) || 'newest',
   preview: null,
   previewUrl: '',
   jobTimer: null,
   favoriteJobTimer: null,
   isSeeking: false,
   serverConnected: false,
+
+  sleepTimerEndAt:
+    Number(
+      localStorage.getItem(
+        storageKeys.sleepTimerEndAt
+      ) || 0
+    ),
+
+  sleepTimerTimer: null,
 
   serverCheckTimer: null,
   serverCheckBusy: false,
@@ -119,6 +134,7 @@ function initElements() {
     favoriteImportStatus: $('#favoriteImportStatus'),
     trackList: $('#trackList'),
     searchInput: $('#searchInput'),
+    trackSortSelect: $('#trackSortSelect'),
     playAllButton: $('#playAllButton'),
     offlineSummary: $('#offlineSummary'),
     playlistSaveStatus: $('#playlistSaveStatus'),
@@ -980,13 +996,30 @@ function startServerConnectionMonitor() {
    */
   document.addEventListener(
     'visibilitychange',
-    () => {
+    async () => {
 
-      if (!document.hidden) {
-
-        checkServerConnection();
-
+      if (document.hidden) {
+        return;
       }
+
+
+      /*
+       * Mac 原来就是在线的：
+       * 回到 Gama Music 时同步一次最新音乐库。
+       */
+      if (state.serverConnected) {
+
+        await loadLibrary();
+
+        return;
+      }
+
+
+      /*
+       * 原来离线：
+       * 检查 Mac Server 是否重新上线。
+       */
+      await checkServerConnection();
 
     }
   );
@@ -1014,10 +1047,119 @@ function renderEmptyConnection(message) {
   els.playlistDetail.innerHTML = '';
 }
 
+function sortedLibraryTracks() {
+
+  const tracks =
+    [...state.library.tracks];
+
+
+  if (
+    state.trackSort ===
+    'oldest'
+  ) {
+
+    tracks.sort(
+      (a, b) =>
+        new Date(
+          a.createdAt || 0
+        ) -
+        new Date(
+          b.createdAt || 0
+        )
+    );
+
+  } else if (
+    state.trackSort ===
+    'az'
+  ) {
+
+    tracks.sort(
+      (a, b) =>
+        String(
+          a.title || ''
+        ).localeCompare(
+          String(
+            b.title || ''
+          ),
+          'zh-CN',
+          {
+            sensitivity:
+              'base'
+          }
+        )
+    );
+
+  } else if (
+    state.trackSort ===
+    'za'
+  ) {
+
+    tracks.sort(
+      (a, b) =>
+        String(
+          b.title || ''
+        ).localeCompare(
+          String(
+            a.title || ''
+          ),
+          'zh-CN',
+          {
+            sensitivity:
+              'base'
+          }
+        )
+    );
+
+  } else {
+
+    /*
+     * 默认：最新添加。
+     */
+    tracks.sort(
+      (a, b) =>
+        new Date(
+          b.createdAt || 0
+        ) -
+        new Date(
+          a.createdAt || 0
+        )
+    );
+
+  }
+
+
+  return tracks;
+
+}
+
+
 function renderTracks() {
-  const query = els.searchInput.value.trim().toLowerCase();
-  const tracks = state.library.tracks.filter((track) => track.title.toLowerCase().includes(query));
-  els.trackList.innerHTML = renderTrackCards(tracks, { context: 'library' });
+
+  const query =
+    els.searchInput.value
+      .trim()
+      .toLowerCase();
+
+
+  const tracks =
+    sortedLibraryTracks()
+      .filter(
+        (track) =>
+          track.title
+            .toLowerCase()
+            .includes(query)
+      );
+
+
+  els.trackList.innerHTML =
+    renderTrackCards(
+      tracks,
+      {
+        context:
+          'library'
+      }
+    );
+
 }
 
 function renderTrackCards(
@@ -1971,7 +2113,13 @@ function queueForContext(context, trackId) {
     const ids = playlist ? playable(playlist.trackIds) : [];
     return ids.length ? ids : [trackId];
   }
-  return playable(state.library.tracks.map((track) => track.id));
+  return playable(
+    sortedLibraryTracks()
+      .map(
+        (track) =>
+          track.id
+      )
+  );
 }
 
 async function fetchBlobWithProgress(url, onProgress) {
@@ -3864,6 +4012,201 @@ async function importLocalMp3Files(fileList) {
   };
 }
 
+function clearSleepTimer() {
+
+  state.sleepTimerEndAt =
+    0;
+
+
+  localStorage.removeItem(
+    storageKeys.sleepTimerEndAt
+  );
+
+}
+
+
+function setSleepTimer(
+  minutes
+) {
+
+  const value =
+    Number(minutes);
+
+
+  if (
+    !Number.isFinite(value) ||
+    value <= 0
+  ) {
+
+    clearSleepTimer();
+
+    return;
+
+  }
+
+
+  state.sleepTimerEndAt =
+    Date.now() +
+    value * 60 * 1000;
+
+
+  localStorage.setItem(
+    storageKeys.sleepTimerEndAt,
+    String(
+      state.sleepTimerEndAt
+    )
+  );
+
+}
+
+
+function sleepTimerSummary() {
+
+  if (
+    !state.sleepTimerEndAt ||
+    state.sleepTimerEndAt <=
+    Date.now()
+  ) {
+
+    return '当前没有设置定时关闭。';
+
+  }
+
+
+  const remainingMinutes =
+    Math.max(
+      1,
+      Math.ceil(
+        (
+          state.sleepTimerEndAt -
+          Date.now()
+        ) /
+        60000
+      )
+    );
+
+
+  const endTime =
+    new Date(
+      state.sleepTimerEndAt
+    ).toLocaleTimeString(
+      [],
+      {
+        hour:
+          '2-digit',
+
+        minute:
+          '2-digit'
+      }
+    );
+
+
+  return (
+    `当前：约 ${remainingMinutes} 分钟后暂停` +
+    `（${endTime}）`
+  );
+
+}
+
+
+function checkSleepTimer() {
+
+  if (
+    !state.sleepTimerEndAt
+  ) {
+    return;
+  }
+
+
+  if (
+    Date.now() <
+    state.sleepTimerEndAt
+  ) {
+    return;
+  }
+
+
+  /*
+   * 到时间以后，
+   * 先清掉定时器，
+   * 再暂停当前音乐。
+   */
+  clearSleepTimer();
+
+
+  if (
+    !els.audio.paused
+  ) {
+
+    els.audio.pause();
+
+  }
+
+
+  renderPlayer();
+
+}
+
+
+function startSleepTimerMonitor() {
+
+  /*
+   * 页面刚打开时先检查一次。
+   */
+  checkSleepTimer();
+
+
+  if (
+    state.sleepTimerTimer
+  ) {
+
+    window.clearInterval(
+      state.sleepTimerTimer
+    );
+
+  }
+
+
+  /*
+   * 每 5 秒检查一次。
+   */
+  state.sleepTimerTimer =
+    window.setInterval(
+      checkSleepTimer,
+      5000
+    );
+
+
+  /*
+   * 播放音乐过程中也检查。
+   *
+   * 对手机锁屏 / 后台播放
+   * 比只依赖 setTimeout 更可靠。
+   */
+  els.audio.addEventListener(
+    'timeupdate',
+    checkSleepTimer
+  );
+
+
+  /*
+   * 回到页面时立即检查。
+   */
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+
+      if (!document.hidden) {
+
+        checkSleepTimer();
+
+      }
+
+    }
+  );
+
+}
+
 function openSettings() {
 
   const current =
@@ -3901,10 +4244,63 @@ function openSettings() {
 
 
       <p
-        id="localImportStatus"
-        class="settings-note"
-      >
-        MP3 会保存在这台设备的 Gama Music 本地存储中。
+  id="backupStatus"
+  class="settings-note"
+>
+  备份包含本地 MP3、封面、歌单和歌曲信息。
+</p>
+
+
+      <hr>
+
+
+      <label class="field">
+
+        <span>
+          定时关闭
+        </span>
+
+        <select
+          id="sleepTimerSelect"
+        >
+
+          <option value="keep">
+            保持当前设置
+          </option>
+
+          <option value="15">
+            15 分钟后暂停
+          </option>
+
+          <option value="30">
+            30 分钟后暂停
+          </option>
+
+          <option value="45">
+            45 分钟后暂停
+          </option>
+
+          <option value="60">
+            60 分钟后暂停
+          </option>
+
+          <option value="90">
+            90 分钟后暂停
+          </option>
+
+          <option value="off">
+            关闭定时器
+          </option>
+
+        </select>
+
+      </label>
+
+
+      <p class="settings-note">
+        ${escapeHtml(
+      sleepTimerSummary()
+    )}
       </p>
 
 
@@ -3980,6 +4376,33 @@ function openSettings() {
 
     onPrimary:
       async () => {
+
+        const sleepChoice =
+          $('#sleepTimerSelect')
+            ?.value ||
+          'keep';
+
+
+        if (
+          sleepChoice ===
+          'off'
+        ) {
+
+          clearSleepTimer();
+
+        } else if (
+          sleepChoice !==
+          'keep'
+        ) {
+
+          setSleepTimer(
+            Number(
+              sleepChoice
+            )
+          );
+
+        }
+
 
         const next =
           $('#apiBaseInput')
@@ -4803,14 +5226,56 @@ function bindEvents() {
     els.favoriteImportForm.addEventListener('submit', startFavoriteImport);
   }
   els.searchInput.addEventListener('input', renderTracks);
+  els.trackSortSelect?.addEventListener(
+    'change',
+    () => {
+
+      state.trackSort =
+        els.trackSortSelect.value;
+
+
+      localStorage.setItem(
+        storageKeys.trackSort,
+        state.trackSort
+      );
+
+
+      renderTracks();
+
+    }
+  );
   els.playlistForm.addEventListener('submit', createPlaylist);
   els.settingsButton.addEventListener('click', openSettings);
-  els.playAllButton.addEventListener('click', async () => {
-    const first = state.serverConnected
-      ? state.library.tracks[0]
-      : state.library.tracks.find((track) => state.offlineTrackIds.has(track.id));
-    if (first) await playTrack(first.id, 'library');
-  });
+  els.playAllButton.addEventListener(
+    'click',
+    async () => {
+
+      const sorted =
+        sortedLibraryTracks();
+
+
+      const first =
+        state.serverConnected
+          ? sorted[0]
+          : sorted.find(
+            (track) =>
+              state.offlineTrackIds.has(
+                track.id
+              )
+          );
+
+
+      if (first) {
+
+        await playTrack(
+          first.id,
+          'library'
+        );
+
+      }
+
+    }
+  );
 
   document.querySelectorAll('[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -4906,9 +5371,16 @@ function registerServiceWorker() {
 document.addEventListener('DOMContentLoaded', async () => {
   initElements();
   bindEvents();
+  if (els.trackSortSelect) {
+
+    els.trackSortSelect.value =
+      state.trackSort;
+
+  }
   setActiveView('library');
   setMode(state.mode);
   registerServiceWorker();
+  startSleepTimerMonitor();
   await refreshOfflineState();
   await loadLibrary();
 
