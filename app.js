@@ -421,7 +421,7 @@ async function refreshOfflineState() {
 
 function renderOfflineSummary() {
   if (!els.offlineSummary) return;
-  els.offlineSummary.textContent = `iPhone 本地：${state.offlineTrackIds.size} 首 · 约 ${formatBytes(state.offlineUsage)}`;
+  els.offlineSummary.textContent = `本地：${state.offlineTrackIds.size} 首 · 约 ${formatBytes(state.offlineUsage)}`;
 }
 
 function getApiBase() {
@@ -618,7 +618,7 @@ function updatePlaylistSaveStatus(playlistId, message, type = 'info', progress =
     job.element = document.createElement('div');
     job.element.className = 'status-card playlist-save-status';
     job.element.innerHTML = '<strong></strong><div class="playlist-save-message"></div><progress max="100"></progress><button type="button" class="secondary-button compact" data-action="dismiss-playlist-save" hidden>关闭</button>';
-    job.element.querySelector('strong').textContent = `保存到手机 · ${job.name}`;
+    job.element.querySelector('strong').textContent = `保存到本地 · ${job.name}`;
     job.element.querySelector('progress').setAttribute('aria-label', `保存 ${job.name} 的进度`);
     job.element.querySelector('button').dataset.playlistId = playlistId;
     els.playlistSaveStatus.append(job.element);
@@ -842,7 +842,7 @@ function render() {
 function renderEmptyConnection(message) {
   const html = `
     <div class="empty-state">
-      没有连上 Mac 服务。请确认 Mac 上的 Gama Music 服务正在运行，iPhone 和 Mac 在同一个 Wi-Fi。<br>
+      没有连上 Mac 服务。请确认 Mac 上的 Gama Music 服务正在运行，当前设备和 Mac 在同一个网络。<br>
       ${escapeHtml(message)}
     </div>
   `;
@@ -880,7 +880,7 @@ function renderTrackCards(
 
     const meta = [
       track.localOnly
-        ? '仅存 iPhone'
+        ? '仅存本地'
         : track.source?.id ||
         'Bilibili',
 
@@ -934,7 +934,7 @@ function renderTrackCards(
             type="button"
             data-action="remove-offline"
             data-track-id="${track.id}"
-            aria-label="删除 iPhone 本地副本"
+            aria-label="删除本地副本"
           >
             ${icon('saved')}
           </button>
@@ -946,7 +946,7 @@ function renderTrackCards(
             type="button"
             data-action="save-offline"
             data-track-id="${track.id}"
-            aria-label="保存到 iPhone"
+            aria-label="保存到本地"
           >
             ${icon('download')}
           </button>
@@ -994,7 +994,7 @@ function renderTrackCards(
           <div class="track-title">
             ${escapeHtml(track.title)}
             ${isOffline
-        ? '<span class="offline-badge">iPhone</span>'
+        ? '<span class="offline-badge">本地</span>'
         : ''
       }
           </div>
@@ -2086,7 +2086,7 @@ async function saveTrackToIphone(
     render();
 
     setStatus(
-      `iPhone 已经完整保存：${track.title}，已跳过。`,
+      `本地已经完整保存：${track.title}，已跳过。`,
       'info',
       100
     );
@@ -2098,7 +2098,7 @@ async function saveTrackToIphone(
   if (!state.serverConnected) {
     if (hasAudio) {
       setStatus(
-        `歌曲已经在 iPhone，但封面尚未保存。连接 Mac 后可以补封面：${track.title}`,
+        `歌曲已经保存在本地，但封面尚未保存。连接 Mac 后可以补封面：${track.title}`,
         'warning',
         100
       );
@@ -2107,7 +2107,7 @@ async function saveTrackToIphone(
     }
 
     throw new Error(
-      '这首歌还没有保存到 iPhone，并且目前没有连接 Mac。'
+      '这首歌还没有保存到本地，并且目前没有连接 Mac。'
     );
   }
 
@@ -2125,7 +2125,7 @@ async function saveTrackToIphone(
     setStatus(
       hasAudio
         ? `音频已经存在，准备检查封面：${track.title}`
-        : `准备保存到 iPhone：${track.title}`,
+        : `准备保存到本地：${track.title}`,
       'info',
       hasAudio
         ? 95
@@ -2222,7 +2222,7 @@ async function saveTrackToIphone(
     const message =
       error?.name ===
         'QuotaExceededError'
-        ? 'iPhone 可用存储空间不足，请先删除一些本地歌曲。'
+        ? '本地可用存储空间不足，请先删除一些本地歌曲。'
         : error.message;
 
     setStatus(
@@ -2274,7 +2274,7 @@ async function savePlaylistToIphone(
   state.playlistSaveJobs.set(playlistId, job);
   const report = (message, type = 'info', progress = null) =>
     updatePlaylistSaveStatus(playlistId, message, type, progress);
-  if (job.element) job.element.querySelector('strong').textContent = `保存到手机 · ${job.name}`;
+  if (job.element) job.element.querySelector('strong').textContent = `保存到本地 · ${job.name}`;
   report('准备保存…', 'info', 0);
   syncPlaylistSaveButtons();
   button.disabled = true;
@@ -2506,7 +2506,7 @@ async function savePlaylistToIphone(
     const message =
       error?.name ===
         'QuotaExceededError'
-        ? 'iPhone 可用存储空间不足，请先删除一些本地歌曲。'
+        ? '本地可用存储空间不足，请先删除一些本地歌曲。'
         : error.message;
 
     report(
@@ -2570,7 +2570,7 @@ async function playTrack(trackId, context = 'library') {
     if (saved?.blob) source = URL.createObjectURL(saved.blob);
   }
   if (!source) {
-    if (!state.serverConnected) throw new Error('这首歌还没有保存到 iPhone，请连接 Mac 后保存。');
+    if (!state.serverConnected) throw new Error('这首歌还没有保存到本地，请连接 Mac 后保存。');
     source = mediaUrl(track);
   }
 
