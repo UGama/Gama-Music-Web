@@ -3156,7 +3156,10 @@ function openModal({ title, body, primaryText = '保存', onPrimary }) {
     await onPrimary?.();
     closeModal();
   };
-  const input = els.modalBody.querySelector('input');
+  const input =
+    els.modalBody.querySelector(
+      'input[type="text"], input[type="url"], input[type="search"], input:not([type])'
+    );
   if (input) {
     input.focus({ preventScroll: true });
     input.setSelectionRange(0, input.value.length);
@@ -4268,6 +4271,9 @@ function openSettings() {
             保持当前设置
           </option>
 
+          <option value="1">
+  1 分钟后暂停（测试）
+</option>
           <option value="15">
             15 分钟后暂停
           </option>
