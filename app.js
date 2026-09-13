@@ -2016,19 +2016,36 @@ async function startFavoriteImport(event) {
 }
 
 async function saveFavoriteTracksToWeb(
-  trackIds,
+  tracks,
   playlistName
 ) {
 
-  const ids =
+  /*
+   * Desktop 现在直接把完整歌曲信息
+   * 跟收藏夹任务一起返回。
+   */
+  const uniqueTracks =
     Array.from(
-      new Set(
-        trackIds || []
-      )
+      new Map(
+        (Array.isArray(tracks)
+          ? tracks
+          : []
+        )
+          .filter(
+            (track) =>
+              track?.id
+          )
+          .map(
+            (track) => [
+              track.id,
+              track
+            ]
+          )
+      ).values()
     );
 
 
-  if (!ids.length) {
+  if (!uniqueTracks.length) {
 
     return {
       saved: 0,
@@ -2039,7 +2056,80 @@ async function saveFavoriteTracksToWeb(
   }
 
 
-  if (navigator.storage?.persist) {
+  /*
+   * 先把歌曲信息放进 Web 音乐库。
+   *
+   * 这样下面保存 MP3 时，
+   * 已经完全不需要 /api/library。
+   */
+  for (
+    const incomingTrack
+    of uniqueTracks
+  ) {
+
+    const existingIndex =
+      state.library.tracks.findIndex(
+        (track) =>
+          track.id ===
+          incomingTrack.id
+      );
+
+
+    if (
+      existingIndex === -1
+    ) {
+
+      state.library.tracks.unshift({
+        ...incomingTrack,
+        localOnly: false
+      });
+
+    } else {
+
+      const existing =
+        state.library.tracks[
+        existingIndex
+        ];
+
+
+      state.library.tracks[
+        existingIndex
+      ] = {
+        ...existing,
+        ...incomingTrack,
+
+        /*
+         * 如果用户已经在 Web 改过歌名，
+         * 不让 Desktop 又覆盖回来。
+         */
+        title:
+          existing.title ||
+          incomingTrack.title,
+
+        localOnly:
+          existing.localOnly ??
+          false
+      };
+
+    }
+
+  }
+
+
+  /*
+   * 先保存一次歌曲目录。
+   *
+   * 即使后面的 MP3 下载中断，
+   * Web 也不会丢掉刚收到的歌曲信息。
+   */
+  await cacheLibrary(
+    state.library
+  ).catch(() => { });
+
+
+  if (
+    navigator.storage?.persist
+  ) {
 
     await navigator.storage
       .persist()
@@ -2055,18 +2145,19 @@ async function saveFavoriteTracksToWeb(
 
   for (
     let index = 0;
-    index < ids.length;
+    index < uniqueTracks.length;
     index += 1
   ) {
 
-    const trackId =
-      ids[index];
+    const incomingTrack =
+      uniqueTracks[index];
 
 
     const track =
       state.library.tracks.find(
         (item) =>
-          item.id === trackId
+          item.id ===
+          incomingTrack.id
       );
 
 
@@ -2093,7 +2184,7 @@ async function saveFavoriteTracksToWeb(
                   index +
                   percent / 100
                 ) /
-                ids.length *
+                uniqueTracks.length *
                 100
               );
 
@@ -2101,7 +2192,7 @@ async function saveFavoriteTracksToWeb(
             setFavoriteStatus(
               `正在保存到 Web 本地` +
               ` · ${playlistName}` +
-              ` · ${index + 1}/${ids.length}` +
+              ` · ${index + 1}/${uniqueTracks.length}` +
               ` · ${track.title}`,
               'info',
               progress
@@ -2112,29 +2203,30 @@ async function saveFavoriteTracksToWeb(
           (stage) => {
 
             if (
-              stage === 'cover'
+              stage !== 'cover'
             ) {
-
-              const progress =
-                Math.round(
-                  (
-                    index +
-                    0.97
-                  ) /
-                  ids.length *
-                  100
-                );
+              return;
+            }
 
 
-              setFavoriteStatus(
-                `正在保存封面` +
-                ` · ${index + 1}/${ids.length}` +
-                ` · ${track.title}`,
-                'info',
-                progress
+            const progress =
+              Math.round(
+                (
+                  index +
+                  0.97
+                ) /
+                uniqueTracks.length *
+                100
               );
 
-            }
+
+            setFavoriteStatus(
+              `正在保存封面` +
+              ` · ${index + 1}/${uniqueTracks.length}` +
+              ` · ${track.title}`,
+              'info',
+              progress
+            );
 
           }
 
@@ -2158,6 +2250,7 @@ async function saveFavoriteTracksToWeb(
 
       failed += 1;
 
+
       console.error(
         '收藏夹歌曲保存到 Web 失败：',
         track.title,
@@ -2171,6 +2264,12 @@ async function saveFavoriteTracksToWeb(
 
   await refreshOfflineState();
 
+
+  await cacheLibrary(
+    state.library
+  ).catch(() => { });
+
+
   render();
 
 
@@ -2181,6 +2280,7 @@ async function saveFavoriteTracksToWeb(
   };
 
 }
+
 
 function pollFavoriteJob(jobId) {
   window.clearInterval(state.favoriteJobTimer);
@@ -2214,9 +2314,6 @@ function pollFavoriteJob(jobId) {
 
         els.favoriteImportButton.disabled = false;
 
-        await loadLibrary();
-
-
         let localSync =
           null;
 
@@ -2226,13 +2323,50 @@ function pollFavoriteJob(jobId) {
         ) {
 
           /*
-           * Desktop 完成整个收藏夹下载以后，
-           * 把所有歌曲真正复制到
-           * 当前 Web 的 IndexedDB。
+           * 新 Desktop 会直接把完整歌曲信息
+           * 放在 job.tracks 里面。
+           *
+           * Web 不再需要先读取
+           * Desktop 的整个音乐库。
            */
+          let tracksForWeb =
+            Array.isArray(job.tracks)
+              ? job.tracks
+              : [];
+
+
+          /*
+           * 暂时保留兼容旧 Desktop。
+           *
+           * 等新 Desktop 正式发布以后，
+           * 这一段兼容代码可以再删除。
+           */
+          if (
+            !tracksForWeb.length &&
+            (job.trackIds || []).length
+          ) {
+
+            await loadLibrary();
+
+
+            tracksForWeb =
+              (job.trackIds || [])
+                .map(
+                  (trackId) =>
+                    state.library.tracks.find(
+                      (track) =>
+                        track.id ===
+                        trackId
+                    )
+                )
+                .filter(Boolean);
+
+          }
+
+
           localSync =
             await saveFavoriteTracksToWeb(
-              job.trackIds,
+              tracksForWeb,
               job.playlistName ||
               'B站收藏夹'
             );
