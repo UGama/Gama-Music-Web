@@ -164,7 +164,7 @@ function openOfflineDb() {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('无法打开 iPhone 本地存储。'));
+    request.onerror = () => reject(request.error || new Error('无法打开本地存储。'));
   });
 }
 
@@ -174,9 +174,9 @@ async function offlineRequest(storeName, mode, operation) {
     const transaction = db.transaction(storeName, mode);
     const request = operation(transaction.objectStore(storeName));
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('iPhone 本地存储操作失败。'));
+    request.onerror = () => reject(request.error || new Error('本地存储操作失败。'));
     transaction.oncomplete = () => db.close();
-    transaction.onabort = () => reject(transaction.error || new Error('iPhone 本地存储空间不足。'));
+    transaction.onabort = () => reject(transaction.error || new Error('本地存储空间不足。'));
   });
 }
 
@@ -429,20 +429,89 @@ function getApiBase() {
 }
 
 async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const headers = {
+    ...(options.headers || {})
+  };
 
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...options,
-    headers,
-    body: options.body && typeof options.body !== 'string' ? JSON.stringify(options.body) : options.body
-  });
-
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(data.error || `请求失败：${response.status}`);
+  if (
+    options.body &&
+    !headers['Content-Type']
+  ) {
+    headers['Content-Type'] =
+      'application/json';
   }
+
+
+  let response;
+
+  try {
+
+    response = await fetch(
+      `${getApiBase()}${path}`,
+      {
+        ...options,
+        headers,
+        body:
+          options.body &&
+            typeof options.body !== 'string'
+            ? JSON.stringify(
+              options.body
+            )
+            : options.body
+      }
+    );
+
+  } catch {
+
+    throw new Error(
+      '无法连接 Mac 服务，请检查 Gama Music Server 和服务地址。'
+    );
+
+  }
+
+
+  const text =
+    await response.text();
+
+  let data = {};
+
+
+  if (text) {
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch {
+
+      if (!response.ok) {
+
+        throw new Error(
+          `请求失败：${response.status}`
+        );
+
+      }
+
+      throw new Error(
+        'Mac 服务返回了无法识别的数据。'
+      );
+
+    }
+
+  }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `请求失败：${response.status}`
+    );
+
+  }
+
+
   return data;
 }
 
@@ -1501,9 +1570,7 @@ async function startFavoriteImport(event) {
     });
 
     setFavoriteStatus(
-      job.alreadyImported
-        ? `已经导入过“${job.playlistName}”，正在同步更新……`
-        : `已创建播放列表“${job.playlistName}”，开始导入……`,
+      `已读取收藏夹“${job.playlistName}”，开始同步……`,
       'info',
       job.progress
     );
@@ -1535,7 +1602,6 @@ function pollFavoriteJob(jobId) {
         `${job.playlistName || '收藏夹'} · ${job.processed}/${job.total}`,
         `新下载 ${job.downloaded}`,
         `已有 ${job.duplicates}`,
-        `加入列表 ${job.addedToPlaylist}`,
         `失败 ${job.failed}`
       ].join(' · ') + (current ? ` · ${current}` : '');
 
@@ -1692,13 +1758,15 @@ function pollFavoriteJob(jobId) {
 
         if (job.status === 'complete') {
           setFavoriteStatus(
-            `${job.alreadyImported ? '同步完成' : '导入完成'}：${job.playlistName}` +
+            `同步完成：${job.playlistName}` +
             ` · 新下载 ${job.downloaded} 首` +
             ` · 已有 ${job.duplicates} 首` +
-            ` · 新加入播放列表 ${job.addedToPlaylist} 首` +
-            ` · 已在列表 ${job.alreadyInPlaylist} 首` +
-            (job.failed ? ` · 失败 ${job.failed} 首` : ''),
-            job.failed ? 'warning' : 'info',
+            (job.failed
+              ? ` · 失败 ${job.failed} 首`
+              : ''),
+            job.failed
+              ? 'warning'
+              : 'info',
             100
           );
         } else {
