@@ -1794,6 +1794,75 @@ async function startDownload(event) {
   }
 }
 
+async function completeDesktopTransfer(
+  track,
+  saveResult
+) {
+
+  if (!track?.id) {
+    return false;
+  }
+
+
+  /*
+   * 如果封面本来存在，
+   * 但这次 Web 保存封面失败，
+   * 暂时不要让 Desktop 删除临时文件。
+   *
+   * MP3 已经安全保存在 Web，
+   * 但我们还留一次补救封面的机会。
+   */
+  if (
+    saveResult?.coverStatus ===
+    'failed'
+  ) {
+
+    console.warn(
+      '封面没有成功保存，暂时保留 Desktop 临时文件：',
+      track.title
+    );
+
+    return false;
+
+  }
+
+
+  try {
+
+    await api(
+      `/api/transfers/${encodeURIComponent(track.id)}/complete`,
+      {
+        method: 'POST'
+      }
+    );
+
+
+    return true;
+
+  } catch (error) {
+
+    /*
+     * 清理失败不影响 Web 已经保存好的歌曲。
+     *
+     * 最坏情况只是 Desktop
+     * 多留了一份临时文件。
+     */
+    console.warn(
+      'Desktop 临时文件清理失败：',
+      track.title,
+      error
+    );
+
+
+    return false;
+
+  }
+
+}
+
+
+
+
 async function saveDownloadedTrackToWeb(
   track
 ) {
@@ -1979,7 +2048,10 @@ function pollJob(jobId) {
             await saveDownloadedTrackToWeb(
               job.track
             );
-
+          await completeDesktopTransfer(
+            job.track,
+            localResult
+          );
 
           /*
            * 再同步歌曲信息。
@@ -2303,7 +2375,10 @@ async function saveFavoriteTracksToWeb(
 
         );
 
-
+      await completeDesktopTransfer(
+        track,
+        result
+      );
       if (
         result.audioStatus ===
         'saved'
