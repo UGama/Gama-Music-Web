@@ -6159,6 +6159,23 @@ async function createPhoneSyncSession() {
 </p>
 <p>
   <strong>
+    手机扫码更新
+  </strong>
+</p>
+
+<div
+  id="syncQrCode"
+  style="
+    width: 240px;
+    min-height: 240px;
+    margin: 12px auto;
+    padding: 10px;
+    background: white;
+    border-radius: 12px;
+  "
+></div>
+<p>
+  <strong>
     手机同步测试链接
   </strong>
 </p>
@@ -6216,6 +6233,34 @@ ${failedTracks.length
       </div>
     `;
 
+    const qrElement =
+      $('#syncQrCode');
+
+
+    if (
+      qrElement &&
+      readySession.status === 'ready' &&
+      typeof QRCode === 'function'
+    ) {
+
+      new QRCode(
+        qrElement,
+        {
+          text:
+            syncInviteUrl.toString(),
+
+          width:
+            220,
+
+          height:
+            220,
+
+          correctLevel:
+            QRCode.CorrectLevel.M
+        }
+      );
+
+    }
   } catch (error) {
 
     resultBox.innerHTML = `
