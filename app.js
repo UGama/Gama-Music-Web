@@ -59,6 +59,28 @@ const state = {
 let qrScannerStream = null;
 let qrScannerFrame = null;
 
+function isMobilePlayerMode() {
+
+  const standalone =
+    window.matchMedia(
+      '(display-mode: standalone)'
+    ).matches ||
+    window.navigator.standalone === true;
+
+
+  const narrow =
+    window.matchMedia(
+      '(max-width: 719px)'
+    ).matches;
+
+
+  return (
+    standalone &&
+    narrow
+  );
+
+}
+
 const els = {};
 
 function $(selector) {
@@ -1282,34 +1304,41 @@ function renderTrackCards(
 
 
     const offlineButton =
-      isOffline
+      isMobilePlayerMode()
+        ? ''
+        : (
+          isOffline
 
-        ? `
-          <button
-            class="mini-button offline-action offline-saved"
-            type="button"
-            data-action="remove-offline"
-            data-track-id="${track.id}"
-            aria-label="删除本地副本"
-          >
-            ${icon('saved')}
-          </button>
-        `
+            ? `
+            <button
+              class="mini-button offline-action offline-saved"
+              type="button"
+              data-action="remove-offline"
+              data-track-id="${track.id}"
+              aria-label="删除本地副本"
+            >
+              ${icon('saved')}
+            </button>
+          `
 
+            : `
+            <button
+              class="mini-button offline-action"
+              type="button"
+              data-action="save-offline"
+              data-track-id="${track.id}"
+              aria-label="保存到本地"
+            >
+              ${icon('download')}
+            </button>
+          `
+        );
+
+
+    const managementButtons =
+      isMobilePlayerMode()
+        ? ''
         : `
-          <button
-            class="mini-button offline-action"
-            type="button"
-            data-action="save-offline"
-            data-track-id="${track.id}"
-            aria-label="保存到本地"
-          >
-            ${icon('download')}
-          </button>
-        `;
-
-
-    const managementButtons = `
   <button
     class="mini-button"
     type="button"
@@ -1331,9 +1360,9 @@ function renderTrackCards(
   </button>
 
   ${options.playlistId || !track.localOnly
-        ? removeButton
-        : ''
-      }
+          ? removeButton
+          : ''
+        }
 `;
 
 
@@ -1503,6 +1532,8 @@ function bindMobilePlaylistHeaderWatcher() {
 }
 
 function renderPlaylists() {
+  const mobilePlayer =
+    isMobilePlayerMode();
   clearMobilePlaylistHeaderWatcher();
   els.playlistsView.classList.toggle(
     'mobile-detail-open',
@@ -1558,34 +1589,39 @@ function renderPlaylists() {
 
           <div class="playlist-actions">
             <button
-              class="mini-button"
-              type="button"
-              data-action="play-playlist"
-              data-playlist-id="${playlist.id}"
-              aria-label="播放列表"
-            >
-              ${icon('play')}
-            </button>
+  class="mini-button"
+  type="button"
+  data-action="play-playlist"
+  data-playlist-id="${playlist.id}"
+  aria-label="播放列表"
+>
+  ${icon('play')}
+</button>
 
-            <button
-              class="mini-button"
-              type="button"
-              data-action="rename-playlist"
-              data-playlist-id="${playlist.id}"
-              aria-label="改名"
-            >
-              ${icon('edit')}
-            </button>
+${mobilePlayer
+          ? ''
+          : `
+      <button
+        class="mini-button"
+        type="button"
+        data-action="rename-playlist"
+        data-playlist-id="${playlist.id}"
+        aria-label="改名"
+      >
+        ${icon('edit')}
+      </button>
 
-            <button
-              class="mini-button"
-              type="button"
-              data-action="delete-playlist"
-              data-playlist-id="${playlist.id}"
-              aria-label="删除"
-            >
-              ${icon('trash')}
-            </button>
+      <button
+        class="mini-button"
+        type="button"
+        data-action="delete-playlist"
+        data-playlist-id="${playlist.id}"
+        aria-label="删除"
+      >
+        ${icon('trash')}
+      </button>
+    `
+        }
           </div>
         </article>
       `;
@@ -1640,6 +1676,9 @@ function renderPlaylists() {
       </span>
     </div>
 
+      ${mobilePlayer
+      ? ''
+      : `
       <button
         class="mini-button mobile-add-song"
         type="button"
@@ -1648,6 +1687,8 @@ function renderPlaylists() {
       >
         ${icon('add')}
       </button>
+    `
+    }
 
     </div>
 
@@ -1677,6 +1718,9 @@ function renderPlaylists() {
 
   </div>
 
+      ${mobilePlayer
+      ? ''
+      : `
       <button
         class="secondary-button compact desktop-add-song"
         type="button"
@@ -1684,6 +1728,8 @@ function renderPlaylists() {
       >
         ${icon('add')} 添加歌曲
       </button>
+    `
+    }
 
     </div>
 
@@ -1699,6 +1745,9 @@ function renderPlaylists() {
         ▶ 播放全部
       </button>
 
+      ${mobilePlayer
+      ? ''
+      : `
       <button
         class="playlist-main-action"
         type="button"
@@ -1708,6 +1757,8 @@ function renderPlaylists() {
       >
         ${playlistSaveButtonState(selected).label}
       </button>
+    `
+    }
 
     </div>
 
