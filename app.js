@@ -6200,6 +6200,49 @@ async function openIncomingSyncPreview() {
 
 }
 
+function isSyncSessionReady(
+  session
+) {
+
+  if (!session) {
+    return false;
+  }
+
+
+  const trackCount =
+    Number(
+      session.trackCount || 0
+    );
+
+
+  const uploadedTrackCount =
+    Number(
+      session.uploadedTrackCount || 0
+    );
+
+
+  const expectedCoverCount =
+    Number(
+      session.expectedCoverCount || 0
+    );
+
+
+  const uploadedCoverCount =
+    Number(
+      session.uploadedCoverCount || 0
+    );
+
+
+  return (
+    uploadedTrackCount >=
+    trackCount &&
+
+    uploadedCoverCount >=
+    expectedCoverCount
+  );
+
+}
+
 async function createPhoneSyncSession() {
 
   const button =
@@ -6489,6 +6532,31 @@ async function createPhoneSyncSession() {
 
     }
 
+    try {
+
+      const latestSession =
+        await api(
+          `/api/sync/sessions/${encodeURIComponent(
+            readySession.id
+          )}`
+        );
+
+
+      if (latestSession?.session) {
+
+        readySession =
+          latestSession.session;
+
+      }
+
+    } catch (error) {
+
+      console.warn(
+        '无法刷新同步状态：',
+        error
+      );
+
+    }
 
     const expiresAt =
       new Date(
@@ -6548,7 +6616,9 @@ async function createPhoneSyncSession() {
 
 <p>
   状态：
-  ${readySession.status === 'ready'
+  ${isSyncSessionReady(
+      readySession
+    )
         ? '可以发送到手机'
         : '同步文件还没有准备完整'
       }
@@ -6635,7 +6705,9 @@ ${failedTracks.length
 
     if (
       qrElement &&
-      readySession.status === 'ready' &&
+      isSyncSessionReady(
+        readySession
+      ) &&
       typeof QRCode === 'function'
     ) {
 
