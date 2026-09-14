@@ -5294,6 +5294,313 @@ function getIncomingSyncInvite() {
 
 }
 
+async function downloadIncomingSyncSnapshot(
+  invite,
+  manifest
+) {
+
+  const tracks =
+    Array.isArray(manifest?.tracks)
+      ? manifest.tracks
+      : [];
+
+
+  const playlists =
+    Array.isArray(manifest?.playlists)
+      ? manifest.playlists
+      : [];
+
+
+  if (!tracks.length) {
+
+    throw new Error(
+      '这个同步里没有歌曲。'
+    );
+
+  }
+
+
+  /*
+   * 尽量请求浏览器长期保留
+   * Gama Music 的本地数据。
+   */
+  if (navigator.storage?.persist) {
+
+    await navigator.storage
+      .persist()
+      .catch(() => false);
+
+  }
+
+
+  const incomingTracks = [];
+
+
+  for (
+    let index = 0;
+    index < tracks.length;
+    index += 1
+  ) {
+
+    const track =
+      tracks[index];
+
+
+    const trackId =
+      String(
+        track?.id || ''
+      ).trim();
+
+
+    if (!trackId) {
+      continue;
+    }
+
+
+    els.modalBody.innerHTML = `
+      <p>
+        正在更新手机音乐……
+      </p>
+
+      <p>
+        <strong>
+          ${index + 1} / ${tracks.length}
+        </strong>
+      </p>
+
+      <p class="settings-note">
+        ${escapeHtml(
+      track.title || '未命名歌曲'
+    )}
+      </p>
+    `;
+
+
+    const existing =
+      await getOfflineTrack(
+        trackId
+      );
+
+
+    /*
+     * 手机已经有 MP3 就直接复用，
+     * 不重复下载。
+     */
+    let audioBlob =
+      existing?.blob?.size
+        ? existing.blob
+        : null;
+
+
+    if (!audioBlob) {
+
+      const audioResponse =
+        await fetch(
+          `${invite.server}` +
+          `/api/sync/sessions/` +
+          `${encodeURIComponent(
+            invite.sessionId
+          )}` +
+          `/tracks/` +
+          `${encodeURIComponent(
+            trackId
+          )}` +
+          `/audio`,
+          {
+            cache: 'no-store'
+          }
+        );
+
+
+      if (!audioResponse.ok) {
+
+        throw new Error(
+          `下载 MP3 失败：${audioResponse.status}`
+        );
+
+      }
+
+
+      audioBlob =
+        await audioResponse.blob();
+
+
+      if (!audioBlob.size) {
+
+        throw new Error(
+          '收到的 MP3 文件为空。'
+        );
+
+      }
+
+    }
+
+
+    /*
+     * 有封面时：
+     * 已经有就复用，
+     * 没有才从后台下载。
+     */
+    let coverBlob =
+      track.hasCover &&
+        existing?.coverBlob?.size
+        ? existing.coverBlob
+        : null;
+
+
+    if (
+      track.hasCover &&
+      !coverBlob
+    ) {
+
+      const coverResponse =
+        await fetch(
+          `${invite.server}` +
+          `/api/sync/sessions/` +
+          `${encodeURIComponent(
+            invite.sessionId
+          )}` +
+          `/tracks/` +
+          `${encodeURIComponent(
+            trackId
+          )}` +
+          `/cover`,
+          {
+            cache: 'no-store'
+          }
+        );
+
+
+      if (!coverResponse.ok) {
+
+        throw new Error(
+          `下载封面失败：${coverResponse.status}`
+        );
+
+      }
+
+
+      coverBlob =
+        await coverResponse.blob();
+
+
+      if (!coverBlob.size) {
+
+        coverBlob = null;
+
+      }
+
+    }
+
+
+    /*
+     * 手机端自己的歌曲 metadata。
+     */
+    const mobileTrack = {
+      ...track,
+
+      localOnly: true,
+
+      cover:
+        track.hasCover
+          ? 'local-cover'
+          : null
+    };
+
+
+    /*
+     * MP3 + 封面真正写进
+     * 手机 IndexedDB。
+     */
+    await putOfflineTrack({
+      ...(existing || {}),
+
+      trackId,
+
+      track:
+        mobileTrack,
+
+      blob:
+        audioBlob,
+
+      size:
+        audioBlob.size,
+
+      coverBlob:
+        coverBlob || null,
+
+      coverSize:
+        coverBlob?.size || 0,
+
+      savedAt:
+        existing?.savedAt ||
+        new Date().toISOString(),
+
+      updatedAt:
+        new Date().toISOString()
+    });
+
+
+    incomingTracks.push(
+      mobileTrack
+    );
+
+  }
+
+
+  /*
+   * 手机端采用电脑 Web
+   * 发来的播放列表快照。
+   */
+  const validTrackIds =
+    new Set(
+      incomingTracks.map(
+        (track) => track.id
+      )
+    );
+
+
+  const incomingPlaylists =
+    playlists.map(
+      (playlist) => ({
+        ...playlist,
+
+        trackIds:
+          Array.isArray(
+            playlist.trackIds
+          )
+            ? playlist.trackIds.filter(
+              (trackId) =>
+                validTrackIds.has(
+                  trackId
+                )
+            )
+            : []
+      })
+    );
+
+
+  const nextLibrary = {
+    ...state.library,
+
+    tracks:
+      incomingTracks,
+
+    playlists:
+      incomingPlaylists
+  };
+
+
+  await cacheLibrary(
+    nextLibrary
+  );
+
+
+  await refreshOfflineState();
+
+  await loadLibrary();
+
+}
 
 async function openIncomingSyncPreview() {
 
@@ -5391,7 +5698,7 @@ async function openIncomingSyncPreview() {
         '发现手机同步',
 
       primaryText:
-        '知道了',
+        '开始更新',
 
       body: `
         <p class="settings-note">
@@ -5417,13 +5724,46 @@ async function openIncomingSyncPreview() {
         </p>
 
         <p class="settings-note">
-          这一阶段只读取同步清单，
-          还不会下载或修改手机音乐库。
+          开始更新后，只会下载手机缺少的歌曲和封面。
+          播放列表将更新为电脑 Web 当前的版本。
         </p>
       `,
 
       onPrimary:
-        async () => { }
+        async () => {
+
+          els.modalPrimaryButton.disabled =
+            true;
+
+
+          try {
+
+            await downloadIncomingSyncSnapshot(
+              invite,
+              manifest
+            );
+
+
+            window.alert(
+              '手机音乐更新完成。'
+            );
+
+
+          } catch (error) {
+
+            window.alert(
+              `同步失败：${error.message}`
+            );
+
+
+          } finally {
+
+            els.modalPrimaryButton.disabled =
+              false;
+
+          }
+
+        }
 
     });
 
