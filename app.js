@@ -2222,11 +2222,78 @@ async function startFavoriteImport(event) {
   );
 
   try {
-    const { job } = await api('/api/favorites/import', {
-      method: 'POST',
-      body: { url }
-    });
 
+    /*
+     * 只有真正已经保存进 IndexedDB
+     * 的歌曲才算“Web 已有”。
+     *
+     * 旧音乐库里只有目录、
+     * 但没有 MP3 的歌曲不会传给 Desktop，
+     * 所以以后可以重新下载。
+     */
+    const existingTracks =
+      state.library.tracks
+        .filter(
+          (track) =>
+            state.offlineTrackIds.has(
+              track.id
+            )
+        )
+        .map(
+          (track) => ({
+            id:
+              track.id,
+
+            title:
+              track.title,
+
+            originalTitle:
+              track.originalTitle,
+
+            file:
+              track.file || null,
+
+            cover:
+              track.cover || null,
+
+            sourceKey:
+              track.sourceKey ||
+              track.source?.key ||
+              null,
+
+            source:
+              track.source || null,
+
+            duration:
+              track.duration || null,
+
+            uploader:
+              track.uploader || null,
+
+            createdAt:
+              track.createdAt || null,
+
+            updatedAt:
+              track.updatedAt || null,
+
+            localOnly:
+              true
+          })
+        );
+
+
+    const { job } =
+      await api(
+        '/api/favorites/import',
+        {
+          method: 'POST',
+
+          body: {
+            url,
+            existingTracks
+          }
+        }
+      );
     setFavoriteStatus(
       `已读取收藏夹“${job.playlistName}”，开始同步……`,
       'info',
