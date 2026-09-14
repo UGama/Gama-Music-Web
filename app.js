@@ -714,139 +714,153 @@ function formatTime(seconds) {
 async function loadLibrary() {
 
   /*
-   * Web 版首先读取本机 IndexedDB。
-   * Mac 以后只是同步来源，不再是启动 App 的前提。
+   * Web 音乐库现在完全属于
+   * 当前浏览器自己的 IndexedDB。
+   *
+   * Desktop 不再作为音乐库来源。
    */
   const cachedLibrary =
     await getCachedLibrary()
       .catch(() => null);
 
 
-  state.library =
-    cachedLibrary || {
-      tracks: [],
-      playlists: []
-    };
-
-
-  state.serverConnected = false;
+  const cachedTracks =
+    Array.isArray(
+      cachedLibrary?.tracks
+    )
+      ? cachedLibrary.tracks
+      : [];
 
 
   /*
-   * 先立刻显示本地音乐库。
+   * 只有真正拥有 MP3 Blob 的歌曲
+   * 才属于当前 Web 音乐库。
+   *
+   * 以前从 Desktop 同步来的
+   * “只有目录、没有 MP3”的旧歌曲
+   * 会在这里自动消失。
    */
+  const tracks =
+    cachedTracks.filter(
+      (track) =>
+        state.offlineTrackIds.has(
+          track.id
+        )
+    );
+
+
+  const validTrackIds =
+    new Set(
+      tracks.map(
+        (track) =>
+          track.id
+      )
+    );
+
+
+  /*
+   * 播放列表继续保留，
+   * 但移除已经不存在的歌曲 ID。
+   */
+  const playlists =
+    Array.isArray(
+      cachedLibrary?.playlists
+    )
+      ? cachedLibrary.playlists.map(
+        (playlist) => ({
+          ...playlist,
+
+          trackIds:
+            Array.isArray(
+              playlist.trackIds
+            )
+              ? playlist.trackIds.filter(
+                (trackId) =>
+                  validTrackIds.has(
+                    trackId
+                  )
+              )
+              : []
+        })
+      )
+      : [];
+
+
+  state.library = {
+    ...(cachedLibrary || {}),
+    tracks,
+    playlists
+  };
+
+
+  /*
+   * 把清理后的结果重新保存，
+   * 以后这些旧 Desktop 目录
+   * 就不会再次回来。
+   */
+  await cacheLibrary(
+    state.library
+  ).catch(() => { });
+
+
+  /*
+   * 检查当前选中的播放列表
+   * 是否仍然存在。
+   */
+  if (
+    state.selectedPlaylistId &&
+    !state.library.playlists.some(
+      (playlist) =>
+        playlist.id ===
+        state.selectedPlaylistId
+    )
+  ) {
+
+    state.selectedPlaylistId =
+      state.library.playlists[0]?.id ||
+      null;
+
+  }
+
+
+  if (
+    !state.selectedPlaylistId &&
+    state.library.playlists[0]
+  ) {
+
+    state.selectedPlaylistId =
+      state.library.playlists[0].id;
+
+  }
+
+
+  if (
+    state.selectedPlaylistId
+  ) {
+
+    localStorage.setItem(
+      storageKeys.selectedPlaylist,
+      state.selectedPlaylistId
+    );
+
+  } else {
+
+    localStorage.removeItem(
+      storageKeys.selectedPlaylist
+    );
+
+  }
+
+
   setConnection(
-    `本地模式 · 已保存 ${state.offlineTrackIds.size} 首`,
+    state.serverConnected
+      ? `Mac 服务已连接 · 本地已保存 ${state.offlineTrackIds.size} 首`
+      : `本地模式 · 已保存 ${state.offlineTrackIds.size} 首`,
     true
   );
 
+
   render();
-
-
-  /*
-   * 没有主动设置 Mac 地址：
-   * Web 版就保持纯本地模式。
-   */
-  const apiBase =
-    getApiBase();
-
-  if (!apiBase) {
-    return;
-  }
-
-
-  /*
-   * 设置了 Mac 地址以后，
-   * 再尝试后台同步。
-   */
-  try {
-
-    const serverLibrary =
-      await api('/api/library');
-
-
-    const library =
-      mergeOfflineTracks(
-        serverLibrary,
-        cachedLibrary
-      );
-
-
-    state.library =
-      library;
-
-    state.serverConnected =
-      true;
-
-
-    await cacheLibrary(
-      library
-    ).catch(() => { });
-
-
-    if (
-      state.selectedPlaylistId &&
-      !library.playlists.some(
-        (item) =>
-          item.id ===
-          state.selectedPlaylistId
-      )
-    ) {
-
-      state.selectedPlaylistId =
-        library.playlists[0]?.id ||
-        null;
-
-    }
-
-
-    if (
-      !state.selectedPlaylistId &&
-      library.playlists[0]
-    ) {
-
-      state.selectedPlaylistId =
-        library.playlists[0].id;
-
-    }
-
-
-    if (
-      state.selectedPlaylistId
-    ) {
-
-      localStorage.setItem(
-        storageKeys.selectedPlaylist,
-        state.selectedPlaylistId
-      );
-
-    }
-
-
-    setConnection(
-      `${serverLibrary.tracks.length} 首歌，Mac 服务已连接`,
-      true
-    );
-
-    render();
-
-  } catch (error) {
-
-    /*
-     * Mac 连接失败不影响 Web App。
-     * 继续使用本机音乐。
-     */
-    state.serverConnected =
-      false;
-
-    setConnection(
-      `本地模式 · Mac 未连接 · 已保存 ${state.offlineTrackIds.size} 首`,
-      true
-    );
-
-    render();
-
-  }
 
 }
 
@@ -911,14 +925,28 @@ async function checkServerConnection() {
 
 
     /*
-     * Server 以前没连接，
-     * 现在重新上线了。
-     *
-     * 重新载入整个音乐库。
-     */
-    if (!state.serverConnected) {
+ * Desktop 现在只是后台服务。
+ *
+ * 重新连接以后只更新连接状态，
+ * 不再从 Desktop 读取音乐库。
+ */
+    const wasConnected =
+      state.serverConnected;
 
-      await loadLibrary();
+
+    state.serverConnected =
+      true;
+
+
+    setConnection(
+      `Mac 服务已连接 · 本地已保存 ${state.offlineTrackIds.size} 首`,
+      true
+    );
+
+
+    if (!wasConnected) {
+
+      render();
 
     }
 
@@ -1004,20 +1032,16 @@ function startServerConnectionMonitor() {
 
 
       /*
-       * Mac 原来就是在线的：
-       * 回到 Gama Music 时同步一次最新音乐库。
-       */
-      if (state.serverConnected) {
+ * 回到 App 时重新读取
+ * 当前浏览器自己的 IndexedDB。
+ */
+      await refreshOfflineState();
 
-        await loadLibrary();
-
-        return;
-      }
+      await loadLibrary();
 
 
       /*
-       * 原来离线：
-       * 检查 Mac Server 是否重新上线。
+       * Desktop 只检查是否在线。
        */
       await checkServerConnection();
 
@@ -5774,17 +5798,112 @@ async function handleAction(event) {
 
   }
 
-  if (action === 'delete-track') {
-    if (!window.confirm('从 Mac 音乐库删除这首歌？其他设备已保存的本地副本会保留。')) return;
-    await api(`/api/tracks/${encodeURIComponent(trackId)}`, { method: 'DELETE' });
-    if (state.currentTrackId === trackId && !state.offlineTrackIds.has(trackId)) {
-      els.audio.pause();
-      els.audio.removeAttribute('src');
-      if (state.activeObjectUrl) URL.revokeObjectURL(state.activeObjectUrl);
-      state.activeObjectUrl = '';
-      state.currentTrackId = null;
+  if (
+    action ===
+    'delete-track'
+  ) {
+
+    const track =
+      state.library.tracks.find(
+        (item) =>
+          item.id === trackId
+      );
+
+
+    if (!track) {
+      return;
     }
-    await loadLibrary();
+
+
+    if (
+      !window.confirm(
+        `从当前设备删除“${track.title}”？`
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    /*
+     * 删除 IndexedDB 里的
+     * MP3 + 封面。
+     */
+    await deleteOfflineTrack(
+      trackId
+    );
+
+
+    /*
+     * 删除 Web 音乐库里的歌曲。
+     */
+    state.library.tracks =
+      state.library.tracks.filter(
+        (item) =>
+          item.id !== trackId
+      );
+
+
+    /*
+     * 所有播放列表同步移除。
+     */
+    state.library.playlists =
+      state.library.playlists.map(
+        (playlist) => ({
+          ...playlist,
+
+          trackIds:
+            playlist.trackIds.filter(
+              (id) =>
+                id !== trackId
+            )
+        })
+      );
+
+
+    if (
+      state.currentTrackId ===
+      trackId
+    ) {
+
+      els.audio.pause();
+
+      els.audio.removeAttribute(
+        'src'
+      );
+
+
+      if (
+        state.activeObjectUrl
+      ) {
+
+        URL.revokeObjectURL(
+          state.activeObjectUrl
+        );
+
+      }
+
+
+      state.activeObjectUrl =
+        '';
+
+      state.currentTrackId =
+        null;
+
+    }
+
+
+    await refreshOfflineState();
+
+
+    await cacheLibrary(
+      state.library
+    );
+
+
+    render();
+
   }
 
   if (action === 'select-playlist') {
