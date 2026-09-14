@@ -4989,6 +4989,454 @@ function startSleepTimerMonitor() {
 
 }
 
+async function uploadSyncTrackAudio(
+  sessionId,
+  trackId,
+  blob
+) {
+
+  if (
+    !(blob instanceof Blob) ||
+    !blob.size
+  ) {
+
+    throw new Error(
+      '没有找到这首歌的本地 MP3。'
+    );
+
+  }
+
+
+  let response;
+
+
+  try {
+
+    response =
+      await fetch(
+        `${getApiBase()}` +
+        `/api/sync/sessions/` +
+        `${encodeURIComponent(sessionId)}` +
+        `/tracks/` +
+        `${encodeURIComponent(trackId)}` +
+        `/audio`,
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              blob.type ||
+              'audio/mpeg'
+          },
+
+          /*
+           * 这里必须直接发送 Blob。
+           *
+           * 不能使用普通 api()，
+           * 因为 api() 是给 JSON 用的。
+           */
+          body:
+            blob
+        }
+      );
+
+  } catch {
+
+    throw new Error(
+      'MP3 上传失败，请检查 Mac 服务连接。'
+    );
+
+  }
+
+
+  const text =
+    await response.text();
+
+
+  let data = {};
+
+
+  if (text) {
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch {
+
+      throw new Error(
+        'Mac 服务返回了无法识别的数据。'
+      );
+
+    }
+
+  }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `MP3 上传失败：${response.status}`
+    );
+
+  }
+
+
+  return data;
+
+}
+
+async function createPhoneSyncSession() {
+
+  const button =
+    $('#createSyncSessionButton');
+
+  const resultBox =
+    $('#syncSessionResult');
+
+
+  if (!button || !resultBox) {
+    return;
+  }
+
+
+  if (!getApiBase()) {
+
+    resultBox.innerHTML = `
+      <p class="settings-note">
+        请先设置 Mac 服务地址。
+      </p>
+    `;
+
+    return;
+
+  }
+
+
+  button.disabled =
+    true;
+
+  resultBox.innerHTML = `
+    <p class="settings-note">
+      正在创建同步会话……
+    </p>
+  `;
+
+
+  try {
+
+    /*
+     * 先创建临时同步会话。
+     */
+    const { session } =
+      await api(
+        '/api/sync/sessions',
+        {
+          method: 'POST'
+        }
+      );
+
+
+    resultBox.innerHTML = `
+      <p class="settings-note">
+        正在准备音乐库信息……
+      </p>
+    `;
+
+
+    /*
+     * 只发送歌曲 metadata。
+     *
+     * MP3 和封面 Blob
+     * 下一阶段再传。
+     */
+    const tracks =
+      state.library.tracks
+        .filter(
+          (track) =>
+            state.offlineTrackIds.has(
+              track.id
+            )
+        )
+        .map(
+          (track) => ({
+            id:
+              track.id,
+
+            title:
+              track.title,
+
+            originalTitle:
+              track.originalTitle || null,
+
+            sourceKey:
+              track.sourceKey || null,
+
+            source:
+              track.source || null,
+
+            duration:
+              track.duration || null,
+
+            uploader:
+              track.uploader || null,
+
+            createdAt:
+              track.createdAt || null,
+
+            updatedAt:
+              track.updatedAt || null
+          })
+        );
+
+
+    const validTrackIds =
+      new Set(
+        tracks.map(
+          (track) =>
+            track.id
+        )
+      );
+
+
+    /*
+     * 歌单只保留这次同步中
+     * 真正存在的歌曲。
+     */
+    const playlists =
+      state.library.playlists
+        .map(
+          (playlist) => ({
+            id:
+              playlist.id,
+
+            name:
+              playlist.name,
+
+            trackIds:
+              (
+                Array.isArray(
+                  playlist.trackIds
+                )
+                  ? playlist.trackIds
+                  : []
+              ).filter(
+                (trackId) =>
+                  validTrackIds.has(
+                    trackId
+                  )
+              ),
+
+            createdAt:
+              playlist.createdAt || null,
+
+            updatedAt:
+              playlist.updatedAt || null
+          })
+        );
+
+
+    /*
+     * 把 metadata 放进 Desktop
+     * 的临时 sync session。
+     */
+    const manifestResult =
+      await api(
+        `/api/sync/sessions/${encodeURIComponent(session.id)}/manifest`,
+        {
+          method: 'POST',
+
+          body: {
+            tracks,
+            playlists
+          }
+        }
+      );
+
+
+    let readySession =
+      manifestResult.session;
+
+
+    /*
+ * 一首一首上传。
+ *
+ * 第一版先不用并发，
+ * 优先保证稳定和容易排查问题。
+ */
+    const failedTracks =
+      [];
+
+
+    for (
+      let index = 0;
+      index < tracks.length;
+      index += 1
+    ) {
+
+      const track =
+        tracks[index];
+
+
+      resultBox.innerHTML = `
+        <p class="settings-note">
+          正在上传 MP3：
+          ${index + 1} / ${tracks.length}
+        </p>
+
+        <p class="settings-note">
+          ${escapeHtml(track.title)}
+        </p>
+      `;
+
+
+      try {
+
+        const record =
+          await getOfflineTrack(
+            track.id
+          );
+
+
+        if (
+          !(record?.blob instanceof Blob) ||
+          !record.blob.size
+        ) {
+
+          throw new Error(
+            '本地 MP3 不存在'
+          );
+
+        }
+
+
+        const uploadResult =
+          await uploadSyncTrackAudio(
+            readySession.id,
+            track.id,
+            record.blob
+          );
+
+
+        readySession =
+          uploadResult.session;
+
+
+      } catch (error) {
+
+        console.warn(
+          '同步 MP3 失败：',
+          track.title,
+          error
+        );
+
+
+        failedTracks.push({
+          track,
+          message:
+            error.message
+        });
+
+      }
+
+    }
+
+
+    const expiresAt =
+      new Date(
+        readySession.expiresAt
+      );
+
+    resultBox.innerHTML = `
+      <div class="settings-note">
+        <strong>同步码</strong>
+        <div
+          style="
+            margin-top: 8px;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.05);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            word-break: break-all;
+            user-select: all;
+          "
+        >
+          ${escapeHtml(readySession.id)}
+        </div>
+
+        <p>
+          ${readySession.trackCount} 首歌曲 ·
+          ${readySession.playlistCount} 个歌单
+        </p>
+
+        <p>
+  已上传：
+  ${readySession.uploadedTrackCount || 0}
+  /
+  ${readySession.trackCount || 0}
+  首 MP3
+</p>
+
+${failedTracks.length
+        ? `
+      <p
+        class="settings-note"
+        style="color: #9b372b;"
+      >
+        ${failedTracks.length} 首上传失败：
+        ${escapeHtml(
+          failedTracks
+            .slice(0, 3)
+            .map(
+              (item) =>
+                item.track.title
+            )
+            .join('、')
+        )}
+        ${failedTracks.length > 3
+          ? '……'
+          : ''
+        }
+      </p>
+    `
+        : ''
+      }
+        <p style="margin-bottom: 0;">
+          有效至：
+          ${escapeHtml(
+        expiresAt.toLocaleTimeString(
+          [],
+          {
+            hour: '2-digit',
+            minute: '2-digit'
+          }
+        )
+      )}
+        </p>
+      </div>
+    `;
+
+  } catch (error) {
+
+    resultBox.innerHTML = `
+      <p class="settings-note">
+        ${escapeHtml(
+      error.message
+    )}
+      </p>
+    `;
+
+  } finally {
+
+    button.disabled =
+      false;
+
+  }
+
+}
+
 function openSettings() {
 
   const current =
@@ -5155,6 +5603,35 @@ function openSettings() {
           `
         : ''
       }
+
+
+      <hr>
+
+
+      <div class="field">
+
+        <span>
+          手机同步
+        </span>
+
+        <p class="settings-note">
+          将当前电脑 Web 音乐库同步到手机。
+        </p>
+
+        <button
+          id="createSyncSessionButton"
+          class="secondary-button"
+          type="button"
+        >
+          创建手机同步
+        </button>
+
+        <div
+          id="syncSessionResult"
+          style="margin-top: 12px;"
+        ></div>
+
+      </div>
 
     `,
 
@@ -5406,6 +5883,20 @@ function openSettings() {
         }
 
       }
+    );
+
+
+  /*
+   * 手机同步按钮。
+   */
+  const createSyncButton =
+    $('#createSyncSessionButton');
+
+
+  createSyncButton
+    ?.addEventListener(
+      'click',
+      createPhoneSyncSession
     );
 
 }
