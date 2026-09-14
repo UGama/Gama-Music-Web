@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v48';
+const CACHE_NAME = 'gama-music-shell-v49';
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
     url.protocol !== 'https:'
   ) {
     return;
-  } Ï
+  }
 
   /*
    * 不处理 Chrome 扩展等非 HTTP(S) 请求。
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
     url.protocol !== 'https:'
   ) {
     return;
-  } Ï
+  }
   if (url.pathname.startsWith('/api/')) {
     return;
   }

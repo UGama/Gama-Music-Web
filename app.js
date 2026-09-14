@@ -2,6 +2,7 @@
 
 const storageKeys = {
   apiBase: 'gamaMusic.apiBase',
+  relayAccessKey: 'gamaMusic.relayAccessKey',
   mode: 'gamaMusic.mode',
   selectedPlaylist: 'gamaMusic.selectedPlaylist',
   trackSort: 'gamaMusic.trackSort',
@@ -448,11 +449,34 @@ function getApiBase() {
   return (localStorage.getItem(storageKeys.apiBase) || '').trim().replace(/\/$/, '');
 }
 
+function getRelayAccessKey() {
+
+  return (
+    localStorage.getItem(
+      storageKeys.relayAccessKey
+    ) || ''
+  ).trim();
+
+}
+
 async function api(path, options = {}) {
   const headers = {
     ...(options.headers || {})
   };
 
+  const relayAccessKey =
+    getRelayAccessKey();
+
+
+  if (
+    relayAccessKey &&
+    !headers.Authorization
+  ) {
+
+    headers.Authorization =
+      `Bearer ${relayAccessKey}`;
+
+  }
   if (
     options.body &&
     !headers['Content-Type']
@@ -867,7 +891,7 @@ async function loadLibrary() {
 async function checkServerConnection() {
 
   /*
-   * 没有设置 Mac 服务地址，
+   * 没有设置共享后台地址，
    * 就保持纯本地模式。
    */
   if (!getApiBase()) {
@@ -5026,7 +5050,14 @@ async function uploadSyncTrackAudio(
           headers: {
             'Content-Type':
               blob.type ||
-              'audio/mpeg'
+              'image/jpeg',
+
+            ...(getRelayAccessKey()
+              ? {
+                Authorization:
+                  `Bearer ${getRelayAccessKey()}`
+              }
+              : {})
           },
 
           /*
@@ -5124,7 +5155,14 @@ async function uploadSyncTrackCover(
           headers: {
             'Content-Type':
               blob.type ||
-              'image/jpeg'
+              'audio/mpeg',
+
+            ...(getRelayAccessKey()
+              ? {
+                Authorization:
+                  `Bearer ${getRelayAccessKey()}`
+              }
+              : {})
           },
 
           body:
@@ -5444,7 +5482,7 @@ async function createPhoneSyncSession() {
 
     resultBox.innerHTML = `
       <p class="settings-note">
-        请先设置 Mac 服务地址。
+        请先设置共享后台地址。
       </p>
     `;
 
@@ -5863,6 +5901,10 @@ function openSettings() {
     getApiBase();
 
 
+  const currentRelayAccessKey =
+    getRelayAccessKey();
+
+
   const isHttpsPage =
     location.protocol === 'https:';
 
@@ -5995,7 +6037,7 @@ function openSettings() {
       <label class="field">
 
         <span>
-          Mac 服务地址
+         共享后台地址
         </span>
 
         <input
@@ -6009,20 +6051,45 @@ function openSettings() {
 
 
       <p class="settings-note">
-        Mac 地址可以留空。
-        留空时 Gama Music Web 完全使用本地音乐库。
+        后台地址可以留空。
+        留空时 Gama Music Web 只使用当前浏览器的本地音乐库。
       </p>
 
 
-      ${isHttpsPage
+            ${isHttpsPage
         ? `
             <p class="settings-note">
               当前页面使用 HTTPS。
-              HTTP Mac 地址可能被 Safari 阻止。
+              后台地址也建议使用 HTTPS。
             </p>
           `
         : ''
       }
+
+
+      <label class="field">
+
+        <span>
+          后台访问密码
+        </span>
+
+        <input
+          id="relayAccessKeyInput"
+          type="password"
+          placeholder="可选"
+          autocomplete="off"
+          value="${escapeHtml(
+        currentRelayAccessKey
+      )}"
+        >
+
+      </label>
+
+
+      <p class="settings-note">
+        连接共享后台时需要。
+        密码只保存在当前浏览器中。
+      </p>
 
 
       <hr>
@@ -6108,6 +6175,31 @@ function openSettings() {
 
         }
 
+
+        const nextRelayAccessKey =
+          $('#relayAccessKeyInput')
+            ?.value
+            .trim() ||
+          '';
+
+
+        if (nextRelayAccessKey) {
+
+          localStorage.setItem(
+            storageKeys.relayAccessKey,
+            nextRelayAccessKey
+          );
+
+        } else {
+
+          localStorage.removeItem(
+            storageKeys.relayAccessKey
+          );
+
+        }
+
+
+        await checkServerConnection();
 
         await loadLibrary();
 
