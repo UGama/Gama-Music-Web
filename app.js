@@ -192,6 +192,40 @@ function initElements() {
   });
 }
 
+function applyMobilePlayerMode() {
+
+  if (!isMobilePlayerMode()) {
+    return;
+  }
+
+
+  /*
+   * 手机 PWA 只负责播放和同步。
+   *
+   * Bilibili、本地库管理、
+   * 创建播放列表等操作留给电脑 Web。
+   */
+  if (els.downloadForm) {
+    els.downloadForm.hidden = true;
+  }
+
+
+  if (els.favoriteImportForm) {
+    els.favoriteImportForm.hidden = true;
+  }
+
+
+  if (els.playlistForm) {
+    els.playlistForm.hidden = true;
+  }
+
+
+  document.body.classList.add(
+    'mobile-player-mode'
+  );
+
+}
+
 function openOfflineDb() {
   return new Promise((resolve, reject) => {
     if (!('indexedDB' in window)) {
@@ -1305,7 +1339,17 @@ function renderTrackCards(
 
     const offlineButton =
       isMobilePlayerMode()
-        ? ''
+        ? `
+      <button
+        class="mini-button"
+        type="button"
+        data-action="remove-offline"
+        data-track-id="${track.id}"
+        aria-label="从手机删除"
+      >
+        ${icon('trash')}
+      </button>
+    `
         : (
           isOffline
 
@@ -6049,6 +6093,155 @@ async function downloadIncomingSyncSnapshot(
 
 }
 
+async function findIncomingSyncMissing(
+  manifest
+) {
+
+  const tracks =
+    Array.isArray(
+      manifest?.tracks
+    )
+      ? manifest.tracks
+      : [];
+
+
+  const audioTrackIds = [];
+  const coverTrackIds = [];
+
+
+  for (const track of tracks) {
+
+    const trackId =
+      String(
+        track?.id || ''
+      );
+
+
+    if (!trackId) {
+      continue;
+    }
+
+
+    const record =
+      await getOfflineTrack(
+        trackId
+      );
+
+
+    /*
+     * 没有真正的 MP3 Blob：
+     * 手机缺这首歌。
+     */
+    if (
+      !(record?.blob instanceof Blob) ||
+      !record.blob.size
+    ) {
+
+      audioTrackIds.push(
+        trackId
+      );
+
+    }
+
+
+    /*
+     * 电脑清单说这首有封面，
+     * 但手机没有真正的 cover Blob。
+     */
+    if (
+      track.hasCover &&
+      (
+        !(record?.coverBlob instanceof Blob) ||
+        !record.coverBlob.size
+      )
+    ) {
+
+      coverTrackIds.push(
+        trackId
+      );
+
+    }
+
+  }
+
+
+  return {
+    audioTrackIds,
+    coverTrackIds
+  };
+
+}
+
+
+async function reportIncomingSyncMissing(
+  invite,
+  missing
+) {
+
+  const response =
+    await fetch(
+      `${invite.server}` +
+      `/api/sync/sessions/` +
+      `${encodeURIComponent(
+        invite.sessionId
+      )}` +
+      `/missing`,
+      {
+        method:
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify(
+            missing
+          )
+      }
+    );
+
+
+  const text =
+    await response.text();
+
+
+  let data = {};
+
+
+  if (text) {
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch {
+
+      throw new Error(
+        '后台返回的缺失清单结果无法识别。'
+      );
+
+    }
+
+  }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `报告缺失歌曲失败：${response.status}`
+    );
+
+  }
+
+
+  return data;
+
+}
+
 async function openIncomingSyncPreview() {
 
   const invite =
@@ -6138,6 +6331,43 @@ async function openIncomingSyncPreview() {
         ? manifest.playlists
         : [];
 
+    /*
+* 先检查手机自己的 IndexedDB，
+* 不再假设所有歌曲都需要下载。
+*/
+    const missing =
+      await findIncomingSyncMissing(
+        manifest
+      );
+
+
+    /*
+     * 把缺失清单告诉 Desktop。
+     */
+    await reportIncomingSyncMissing(
+      invite,
+      missing
+    );
+
+
+    const existingAudioCount =
+      tracks.length -
+      missing.audioTrackIds.length;
+
+
+    const expectedCoverCount =
+      tracks.filter(
+        (track) =>
+          Boolean(
+            track.hasCover
+          )
+      ).length;
+
+
+    const existingCoverCount =
+      expectedCoverCount -
+      missing.coverTrackIds.length;
+
 
     openModal({
 
@@ -6162,6 +6392,30 @@ async function openIncomingSyncPreview() {
         <p>
           ${playlists.length} 个歌单
         </p>
+
+        <p class="settings-note">
+  手机已有歌曲：
+  ${existingAudioCount}
+  /
+  ${tracks.length}
+</p>
+
+<p class="settings-note">
+  缺少歌曲：
+  ${missing.audioTrackIds.length}
+</p>
+
+<p class="settings-note">
+  手机已有封面：
+  ${existingCoverCount}
+  /
+  ${expectedCoverCount}
+</p>
+
+<p class="settings-note">
+  缺少封面：
+  ${missing.coverTrackIds.length}
+</p>
 
         <p class="settings-note">
           Desktop 状态：
@@ -8049,7 +8303,11 @@ function bindEvents() {
 
     }
   );
-  els.playlistForm.addEventListener('submit', createPlaylist);
+  els.playlistForm
+    ?.addEventListener(
+      'submit',
+      createPlaylist
+    );
   els.settingsButton.addEventListener('click', openSettings);
   els.playAllButton.addEventListener(
     'click',
@@ -8175,6 +8433,9 @@ function registerServiceWorker() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   initElements();
+
+  applyMobilePlayerMode();
+
   bindEvents();
   if (els.trackSortSelect) {
 
