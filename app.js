@@ -5087,6 +5087,344 @@ async function uploadSyncTrackAudio(
   return data;
 
 }
+async function uploadSyncTrackCover(
+  sessionId,
+  trackId,
+  blob
+) {
+
+  if (
+    !(blob instanceof Blob) ||
+    !blob.size
+  ) {
+
+    throw new Error(
+      '没有找到这首歌的本地封面。'
+    );
+
+  }
+
+
+  let response;
+
+
+  try {
+
+    response =
+      await fetch(
+        `${getApiBase()}` +
+        `/api/sync/sessions/` +
+        `${encodeURIComponent(sessionId)}` +
+        `/tracks/` +
+        `${encodeURIComponent(trackId)}` +
+        `/cover`,
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              blob.type ||
+              'image/jpeg'
+          },
+
+          body:
+            blob
+        }
+      );
+
+  } catch {
+
+    throw new Error(
+      '封面上传失败，请检查 Mac 服务连接。'
+    );
+
+  }
+
+
+  const text =
+    await response.text();
+
+
+  let data = {};
+
+
+  if (text) {
+
+    try {
+
+      data =
+        JSON.parse(text);
+
+    } catch {
+
+      throw new Error(
+        'Mac 服务返回了无法识别的数据。'
+      );
+
+    }
+
+  }
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `封面上传失败：${response.status}`
+    );
+
+  }
+
+
+  return data;
+
+}
+
+function getIncomingSyncInvite() {
+
+  const params =
+    new URLSearchParams(
+      location.hash.replace(
+        /^#/,
+        ''
+      )
+    );
+
+
+  const sessionId =
+    String(
+      params.get('sync') || ''
+    ).trim();
+
+
+  const server =
+    String(
+      params.get('server') || ''
+    )
+      .trim()
+      .replace(/\/$/, '');
+
+
+  if (
+    !/^sync_[0-9a-f]{32}$/i.test(
+      sessionId
+    )
+  ) {
+
+    return null;
+
+  }
+
+
+  if (!server) {
+
+    return null;
+
+  }
+
+
+  try {
+
+    const serverUrl =
+      new URL(server);
+
+
+    /*
+     * GitHub Pages 是 HTTPS，
+     * 手机同步也只接受 HTTPS Desktop 地址。
+     */
+    if (
+      serverUrl.protocol !==
+      'https:'
+    ) {
+
+      return null;
+
+    }
+
+  } catch {
+
+    return null;
+
+  }
+
+
+  return {
+    sessionId,
+    server
+  };
+
+}
+
+
+async function openIncomingSyncPreview() {
+
+  const invite =
+    getIncomingSyncInvite();
+
+
+  if (!invite) {
+
+    return false;
+
+  }
+
+
+  try {
+
+    const response =
+      await fetch(
+        `${invite.server}` +
+        `/api/sync/sessions/` +
+        `${encodeURIComponent(invite.sessionId)}` +
+        `/manifest`,
+        {
+          cache:
+            'no-store'
+        }
+      );
+
+
+    const text =
+      await response.text();
+
+
+    let data = {};
+
+
+    if (text) {
+
+      try {
+
+        data =
+          JSON.parse(text);
+
+      } catch {
+
+        throw new Error(
+          '同步服务返回的数据无法识别。'
+        );
+
+      }
+
+    }
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data?.error ||
+        `同步连接失败：${response.status}`
+      );
+
+    }
+
+
+    const session =
+      data.session || {};
+
+
+    const manifest =
+      data.manifest || {
+        tracks: [],
+        playlists: []
+      };
+
+
+    const tracks =
+      Array.isArray(
+        manifest.tracks
+      )
+        ? manifest.tracks
+        : [];
+
+
+    const playlists =
+      Array.isArray(
+        manifest.playlists
+      )
+        ? manifest.playlists
+        : [];
+
+
+    openModal({
+
+      title:
+        '发现手机同步',
+
+      primaryText:
+        '知道了',
+
+      body: `
+        <p class="settings-note">
+          已成功连接电脑上的
+          Gama Music Desktop。
+        </p>
+
+        <p>
+          <strong>
+            ${tracks.length} 首歌曲
+          </strong>
+        </p>
+
+        <p>
+          ${playlists.length} 个歌单
+        </p>
+
+        <p class="settings-note">
+          Desktop 状态：
+          ${escapeHtml(
+        session.status || '未知'
+      )}
+        </p>
+
+        <p class="settings-note">
+          这一阶段只读取同步清单，
+          还不会下载或修改手机音乐库。
+        </p>
+      `,
+
+      onPrimary:
+        async () => { }
+
+    });
+
+
+    return true;
+
+  } catch (error) {
+
+    openModal({
+
+      title:
+        '手机同步',
+
+      primaryText:
+        '关闭',
+
+      body: `
+        <p class="settings-note">
+          无法读取同步内容：
+        </p>
+
+        <p>
+          ${escapeHtml(
+        error.message
+      )}
+        </p>
+      `,
+
+      onPrimary:
+        async () => { }
+
+    });
+
+
+    return false;
+
+  }
+
+}
 
 async function createPhoneSyncSession() {
 
@@ -5187,7 +5525,12 @@ async function createPhoneSyncSession() {
               track.createdAt || null,
 
             updatedAt:
-              track.updatedAt || null
+              track.updatedAt || null,
+
+            hasCover:
+              state.offlineCoverUrls.has(
+                track.id
+              )
           })
         );
 
@@ -5323,6 +5666,35 @@ async function createPhoneSyncSession() {
         readySession =
           uploadResult.session;
 
+        if (
+          record?.coverBlob instanceof Blob &&
+          record.coverBlob.size
+        ) {
+
+          resultBox.innerHTML = `
+            <p class="settings-note">
+              正在上传封面：
+              ${index + 1} / ${tracks.length}
+            </p>
+
+            <p class="settings-note">
+              ${escapeHtml(track.title)}
+            </p>
+          `;
+
+
+          const coverResult =
+            await uploadSyncTrackCover(
+              readySession.id,
+              track.id,
+              record.coverBlob
+            );
+
+
+          readySession =
+            coverResult.session;
+
+        }
 
       } catch (error) {
 
@@ -5348,6 +5720,21 @@ async function createPhoneSyncSession() {
       new Date(
         readySession.expiresAt
       );
+
+    const syncInviteUrl =
+      new URL(
+        location.href
+      );
+
+
+    syncInviteUrl.hash =
+      new URLSearchParams({
+        sync:
+          readySession.id,
+
+        server:
+          getApiBase()
+      }).toString();
 
     resultBox.innerHTML = `
       <div class="settings-note">
@@ -5378,6 +5765,39 @@ async function createPhoneSyncSession() {
   ${readySession.trackCount || 0}
   首 MP3
 </p>
+<p>
+  封面：
+  ${readySession.uploadedCoverCount || 0}
+  /
+  ${readySession.expectedCoverCount || 0}
+</p>
+
+<p>
+  状态：
+  ${readySession.status === 'ready'
+        ? '可以发送到手机'
+        : '同步文件还没有准备完整'
+      }
+</p>
+<p>
+  <strong>
+    手机同步测试链接
+  </strong>
+</p>
+
+<div
+  style="
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.05);
+    word-break: break-all;
+    user-select: all;
+  "
+>
+  ${escapeHtml(
+        syncInviteUrl.toString()
+      )}
+</div>
 
 ${failedTracks.length
         ? `
@@ -6754,6 +7174,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   startSleepTimerMonitor();
   await refreshOfflineState();
   await loadLibrary();
+
+
+  /*
+   * 如果 URL 里带有手机同步邀请，
+   * 在页面初始化完成以后读取它。
+   */
+  await openIncomingSyncPreview();
+
 
   startServerConnectionMonitor();
 });
