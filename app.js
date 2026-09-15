@@ -6123,6 +6123,94 @@ async function downloadIncomingSyncSnapshot(
 
 
   /*
+ * 电脑 Web 是主音乐库。
+ *
+ * 如果手机 IndexedDB 里还有
+ * 已经不在本次 manifest 中的歌曲，
+ * 说明这首歌已经从电脑主库删除。
+ *
+ * 在新歌曲全部保存成功以后，
+ * 再安全删除这些旧手机副本。
+ */
+  const incomingTrackIds =
+    new Set(
+      incomingTracks.map(
+        (track) =>
+          String(track.id)
+      )
+    );
+
+
+  const oldPhoneRecords =
+    await getAllOfflineTracks();
+
+
+  for (
+    const record
+    of oldPhoneRecords
+  ) {
+
+    const oldTrackId =
+      String(
+        record?.trackId || ''
+      );
+
+
+    if (
+      !oldTrackId ||
+      incomingTrackIds.has(
+        oldTrackId
+      )
+    ) {
+
+      continue;
+
+    }
+
+
+    await deleteOfflineTrack(
+      oldTrackId
+    );
+
+
+    /*
+     * 如果刚好正在播放
+     * 被电脑删除的歌曲，
+     * 把播放器也一起停止。
+     */
+    if (
+      state.currentTrackId ===
+      oldTrackId
+    ) {
+
+      els.audio.pause();
+
+      els.audio.removeAttribute(
+        'src'
+      );
+
+
+      if (
+        state.activeObjectUrl
+      ) {
+
+        URL.revokeObjectURL(
+          state.activeObjectUrl
+        );
+
+      }
+
+
+      state.activeObjectUrl =
+        '';
+
+      state.currentTrackId =
+        null;
+
+    }
+
+  }
+  /*
    * 手机端采用电脑 Web
    * 发来的播放列表快照。
    */
