@@ -5785,6 +5785,89 @@ function getIncomingSyncInvite() {
 
 }
 
+function clearIncomingSyncInvite() {
+
+  const params =
+    new URLSearchParams(
+      location.hash.replace(
+        /^#/,
+        ''
+      )
+    );
+
+
+  params.delete(
+    'sync'
+  );
+
+  params.delete(
+    'server'
+  );
+
+
+  const nextHash =
+    params.toString();
+
+
+  /*
+   * replaceState 不刷新页面，
+   * 只是把已经用完的二维码参数
+   * 从地址栏清掉。
+   */
+  history.replaceState(
+    history.state,
+    '',
+    `${location.pathname}` +
+    `${location.search}` +
+    (
+      nextHash
+        ? `#${nextHash}`
+        : ''
+    )
+  );
+
+}
+
+async function completeIncomingSync(
+  invite
+) {
+
+  const response =
+    await fetch(
+      `${invite.server}` +
+      `/api/sync/sessions/` +
+      `${encodeURIComponent(
+        invite.sessionId
+      )}` +
+      `/complete`,
+      {
+        method:
+          'POST'
+      }
+    );
+
+
+  const data =
+    await response.json()
+      .catch(
+        () => ({})
+      );
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `确认同步完成失败：${response.status}`
+    );
+
+  }
+
+
+  return data;
+
+}
+
 async function downloadIncomingSyncSnapshot(
   invite,
   manifest
@@ -6091,6 +6174,60 @@ async function downloadIncomingSyncSnapshot(
 
   await loadLibrary();
 
+  /*
+ * ACK 之前再检查一次 IndexedDB。
+ *
+ * 只有所有 MP3 / 封面
+ * 都真正保存到手机以后，
+ * 才允许 Desktop 删除临时文件。
+ */
+  const remainingMissing =
+    await findIncomingSyncMissing(
+      manifest
+    );
+
+
+  if (
+    remainingMissing
+      .audioTrackIds.length ||
+    remainingMissing
+      .coverTrackIds.length
+  ) {
+
+    throw new Error(
+      '同步文件还没有完整保存到手机，暂时不会清理后台文件。'
+    );
+
+  }
+
+
+  /*
+   * 手机已经安全保存完毕。
+   * 通知 Desktop 立即删除临时文件。
+   */
+  await completeIncomingSync(
+    invite
+  );
+
+
+  await completeIncomingSync(
+    invite
+  );
+
+
+  /*
+   * Desktop 已经确认同步完成，
+   * 临时文件也已经安全清理。
+   *
+   * 现在可以把旧二维码参数
+   * 从手机地址栏移除。
+   */
+  clearIncomingSyncInvite();
+
+
+  console.log(
+    `手机同步完成：${invite.sessionId}`
+  );
 }
 
 async function findIncomingSyncMissing(
@@ -6748,8 +6885,12 @@ async function watchPhoneSyncLocalUploads(
      * 所有资源已经准备完成。
      */
     if (
-      data?.session?.status ===
-      'missing-ready'
+      [
+        'missing-ready',
+        'completed'
+      ].includes(
+        data?.session?.status
+      )
     ) {
 
       if (statusElement) {
