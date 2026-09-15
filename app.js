@@ -6688,6 +6688,17 @@ async function watchPhoneSyncLocalUploads(
     );
 
 
+  /*
+   * 防止轮询 /plan 时
+   * 同一份文件重复上传。
+   */
+  const uploadedAudio =
+    new Set();
+
+  const uploadedCovers =
+    new Set();
+
+
   const deadline =
     Date.now() +
     15 * 60 * 1000;
@@ -6699,7 +6710,9 @@ async function watchPhoneSyncLocalUploads(
 
     const data =
       await api(
-        `/api/sync/sessions/${encodeURIComponent(sessionId)}/plan`,
+        `/api/sync/sessions/${encodeURIComponent(
+          sessionId
+        )}/plan`,
         {
           cache:
             'no-store'
@@ -6707,8 +6720,12 @@ async function watchPhoneSyncLocalUploads(
       );
 
 
+    const statusElement =
+      $('#syncLocalUploadStatus');
+
+
     /*
-     * 手机还没有扫码 / 报告 missing。
+     * 手机还没有扫码。
      */
     if (
       !data?.missing?.reportedAt
@@ -6727,6 +6744,30 @@ async function watchPhoneSyncLocalUploads(
     }
 
 
+    /*
+     * 所有资源已经准备完成。
+     */
+    if (
+      data?.session?.status ===
+      'missing-ready'
+    ) {
+
+      if (statusElement) {
+
+        statusElement.textContent =
+          '手机需要的同步文件已经全部准备完成。';
+
+      }
+
+
+      return;
+
+    }
+
+
+    /*
+     * 正常的本地文件需求。
+     */
     const localAudioTrackIds =
       Array.isArray(
         data?.plan
@@ -6734,6 +6775,7 @@ async function watchPhoneSyncLocalUploads(
       )
         ? data.plan
           .localAudioTrackIds
+          .map(String)
         : [];
 
 
@@ -6744,24 +6786,76 @@ async function watchPhoneSyncLocalUploads(
       )
         ? data.plan
           .localCoverTrackIds
+          .map(String)
         : [];
+
+
+    /*
+     * Bilibili 下载失败以后，
+     * Desktop 会把这些 ID
+     * 放到 fallback。
+     */
+    const fallbackAudioTrackIds =
+      Array.isArray(
+        data?.fallback
+          ?.audioTrackIds
+      )
+        ? data.fallback
+          .audioTrackIds
+          .map(String)
+        : [];
+
+
+    const fallbackCoverTrackIds =
+      Array.isArray(
+        data?.fallback
+          ?.coverTrackIds
+      )
+        ? data.fallback
+          .coverTrackIds
+          .map(String)
+        : [];
+
+
+    /*
+     * Web 需要负责上传的资源：
+     *
+     * 1. 本地歌曲
+     * 2. Bilibili 下载失败的歌曲
+     */
+    const audioTrackIds =
+      [
+        ...new Set([
+          ...localAudioTrackIds,
+          ...fallbackAudioTrackIds
+        ])
+      ];
+
+
+    const coverTrackIds =
+      [
+        ...new Set([
+          ...localCoverTrackIds,
+          ...fallbackCoverTrackIds
+        ])
+      ];
 
 
     const requestedTrackIds =
       [
         ...new Set([
-          ...localAudioTrackIds,
-          ...localCoverTrackIds
+          ...audioTrackIds,
+          ...coverTrackIds
         ])
       ];
 
 
-    const statusElement =
-      $('#syncLocalUploadStatus');
-
-
     /*
-     * 手机不缺任何本地文件。
+     * 当前没有需要 Web 上传的东西，
+     * 但不能 return。
+     *
+     * Bilibili 可能还正在下载，
+     * 后面仍可能产生 fallback。
      */
     if (
       !requestedTrackIds.length
@@ -6770,20 +6864,20 @@ async function watchPhoneSyncLocalUploads(
       if (statusElement) {
 
         statusElement.textContent =
-          '手机不缺本地歌曲。';
+          '手机已报告缺失内容，后台正在准备 Bilibili 文件……';
 
       }
 
 
-      return;
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            1500
+          )
+      );
 
-    }
-
-
-    if (statusElement) {
-
-      statusElement.textContent =
-        `手机需要 ${requestedTrackIds.length} 首本地歌曲，正在准备……`;
+      continue;
 
     }
 
@@ -6796,11 +6890,9 @@ async function watchPhoneSyncLocalUploads(
     ) {
 
       const trackId =
-        String(
-          requestedTrackIds[
-          index
-          ]
-        );
+        requestedTrackIds[
+        index
+        ];
 
 
       const track =
@@ -6811,9 +6903,40 @@ async function watchPhoneSyncLocalUploads(
 
       if (!track) {
 
-        throw new Error(
-          `找不到本地歌曲：${trackId}`
+        console.warn(
+          '同步清单里找不到歌曲：',
+          trackId
         );
+
+        continue;
+
+      }
+
+
+      const needsAudio =
+        audioTrackIds.includes(
+          trackId
+        ) &&
+        !uploadedAudio.has(
+          trackId
+        );
+
+
+      const needsCover =
+        coverTrackIds.includes(
+          trackId
+        ) &&
+        !uploadedCovers.has(
+          trackId
+        );
+
+
+      if (
+        !needsAudio &&
+        !needsCover
+      ) {
+
+        continue;
 
       }
 
@@ -6824,22 +6947,26 @@ async function watchPhoneSyncLocalUploads(
         );
 
 
+      const isFallback =
+        fallbackAudioTrackIds.includes(
+          trackId
+        ) ||
+        fallbackCoverTrackIds.includes(
+          trackId
+        );
+
+
       if (statusElement) {
 
         statusElement.textContent =
-          `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`;
+          isFallback
+            ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
+            : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`;
 
       }
 
 
-      /*
-       * 手机缺 MP3 时才上传 MP3。
-       */
-      if (
-        localAudioTrackIds.includes(
-          trackId
-        )
-      ) {
+      if (needsAudio) {
 
         if (
           !(record?.blob instanceof Blob) ||
@@ -6847,7 +6974,7 @@ async function watchPhoneSyncLocalUploads(
         ) {
 
           throw new Error(
-            `本地 MP3 不存在：${track.title}`
+            `电脑本地没有可用于兜底的 MP3：${track.title}`
           );
 
         }
@@ -6859,17 +6986,15 @@ async function watchPhoneSyncLocalUploads(
           record.blob
         );
 
+
+        uploadedAudio.add(
+          trackId
+        );
+
       }
 
 
-      /*
-       * 手机缺封面时才上传封面。
-       */
-      if (
-        localCoverTrackIds.includes(
-          trackId
-        )
-      ) {
+      if (needsCover) {
 
         if (
           !(record?.coverBlob instanceof Blob) ||
@@ -6877,7 +7002,7 @@ async function watchPhoneSyncLocalUploads(
         ) {
 
           throw new Error(
-            `本地封面不存在：${track.title}`
+            `电脑本地没有可用于兜底的封面：${track.title}`
           );
 
         }
@@ -6889,28 +7014,45 @@ async function watchPhoneSyncLocalUploads(
           record.coverBlob
         );
 
+
+        uploadedCovers.add(
+          trackId
+        );
+
       }
 
     }
 
 
-    if (statusElement) {
-
-      statusElement.textContent =
-        `已发送 ${requestedTrackIds.length} 首手机缺少的本地歌曲。`;
-
-    }
-
-
-    return;
+    /*
+     * 上传完不要直接 return。
+     *
+     * Desktop 上传接口会重新计算
+     * missing-ready。
+     * 下一轮查询确认状态。
+     */
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          800
+        )
+    );
 
   }
 
 
-  /*
-   * 15 分钟没人扫码很正常。
-   * 不需要显示成错误。
-   */
+  const statusElement =
+    $('#syncLocalUploadStatus');
+
+
+  if (statusElement) {
+
+    statusElement.textContent =
+      '同步会话已超时，请重新生成二维码。';
+
+  }
+
 }
 
 async function createPhoneSyncSession() {
