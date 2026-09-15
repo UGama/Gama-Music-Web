@@ -6672,6 +6672,247 @@ function isSyncSessionReady(
 
 }
 
+async function watchPhoneSyncLocalUploads(
+  sessionId,
+  tracks
+) {
+
+  const trackById =
+    new Map(
+      tracks.map(
+        (track) => [
+          String(track.id),
+          track
+        ]
+      )
+    );
+
+
+  const deadline =
+    Date.now() +
+    15 * 60 * 1000;
+
+
+  while (
+    Date.now() < deadline
+  ) {
+
+    const data =
+      await api(
+        `/api/sync/sessions/${encodeURIComponent(sessionId)}/plan`,
+        {
+          cache:
+            'no-store'
+        }
+      );
+
+
+    /*
+     * 手机还没有扫码 / 报告 missing。
+     */
+    if (
+      !data?.missing?.reportedAt
+    ) {
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            1500
+          )
+      );
+
+      continue;
+
+    }
+
+
+    const localAudioTrackIds =
+      Array.isArray(
+        data?.plan
+          ?.localAudioTrackIds
+      )
+        ? data.plan
+          .localAudioTrackIds
+        : [];
+
+
+    const localCoverTrackIds =
+      Array.isArray(
+        data?.plan
+          ?.localCoverTrackIds
+      )
+        ? data.plan
+          .localCoverTrackIds
+        : [];
+
+
+    const requestedTrackIds =
+      [
+        ...new Set([
+          ...localAudioTrackIds,
+          ...localCoverTrackIds
+        ])
+      ];
+
+
+    const statusElement =
+      $('#syncLocalUploadStatus');
+
+
+    /*
+     * 手机不缺任何本地文件。
+     */
+    if (
+      !requestedTrackIds.length
+    ) {
+
+      if (statusElement) {
+
+        statusElement.textContent =
+          '手机不缺本地歌曲。';
+
+      }
+
+
+      return;
+
+    }
+
+
+    if (statusElement) {
+
+      statusElement.textContent =
+        `手机需要 ${requestedTrackIds.length} 首本地歌曲，正在准备……`;
+
+    }
+
+
+    for (
+      let index = 0;
+      index <
+      requestedTrackIds.length;
+      index += 1
+    ) {
+
+      const trackId =
+        String(
+          requestedTrackIds[
+          index
+          ]
+        );
+
+
+      const track =
+        trackById.get(
+          trackId
+        );
+
+
+      if (!track) {
+
+        throw new Error(
+          `找不到本地歌曲：${trackId}`
+        );
+
+      }
+
+
+      const record =
+        await getOfflineTrack(
+          trackId
+        );
+
+
+      if (statusElement) {
+
+        statusElement.textContent =
+          `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`;
+
+      }
+
+
+      /*
+       * 手机缺 MP3 时才上传 MP3。
+       */
+      if (
+        localAudioTrackIds.includes(
+          trackId
+        )
+      ) {
+
+        if (
+          !(record?.blob instanceof Blob) ||
+          !record.blob.size
+        ) {
+
+          throw new Error(
+            `本地 MP3 不存在：${track.title}`
+          );
+
+        }
+
+
+        await uploadSyncTrackAudio(
+          sessionId,
+          trackId,
+          record.blob
+        );
+
+      }
+
+
+      /*
+       * 手机缺封面时才上传封面。
+       */
+      if (
+        localCoverTrackIds.includes(
+          trackId
+        )
+      ) {
+
+        if (
+          !(record?.coverBlob instanceof Blob) ||
+          !record.coverBlob.size
+        ) {
+
+          throw new Error(
+            `本地封面不存在：${track.title}`
+          );
+
+        }
+
+
+        await uploadSyncTrackCover(
+          sessionId,
+          trackId,
+          record.coverBlob
+        );
+
+      }
+
+    }
+
+
+    if (statusElement) {
+
+      statusElement.textContent =
+        `已发送 ${requestedTrackIds.length} 首手机缺少的本地歌曲。`;
+
+    }
+
+
+    return;
+
+  }
+
+
+  /*
+   * 15 分钟没人扫码很正常。
+   * 不需要显示成错误。
+   */
+}
+
 async function createPhoneSyncSession() {
 
   const button =
@@ -6870,118 +7111,6 @@ async function createPhoneSyncSession() {
       );
 
 
-    /*
- * 一首一首上传。
- *
- * 第一版先不用并发，
- * 优先保证稳定和容易排查问题。
- */
-    const failedTracks =
-      [];
-
-
-    for (
-      let index = 0;
-      index < localTracks.length;
-      index += 1
-    ) {
-
-      const track =
-        localTracks[index];
-
-
-      resultBox.innerHTML = `
-        <p class="settings-note">
-          正在上传 MP3：
-          ${index + 1} / ${localTracks.length}
-        </p>
-
-        <p class="settings-note">
-          ${escapeHtml(track.title)}
-        </p>
-      `;
-
-
-      try {
-
-        const record =
-          await getOfflineTrack(
-            track.id
-          );
-
-
-        if (
-          !(record?.blob instanceof Blob) ||
-          !record.blob.size
-        ) {
-
-          throw new Error(
-            '本地 MP3 不存在'
-          );
-
-        }
-
-
-        const uploadResult =
-          await uploadSyncTrackAudio(
-            readySession.id,
-            track.id,
-            record.blob
-          );
-
-
-        readySession =
-          uploadResult.session;
-
-        if (
-          record?.coverBlob instanceof Blob &&
-          record.coverBlob.size
-        ) {
-
-          resultBox.innerHTML = `
-            <p class="settings-note">
-              正在上传封面：
-              ${index + 1} / ${localTracks.length}
-            </p>
-
-            <p class="settings-note">
-              ${escapeHtml(track.title)}
-            </p>
-          `;
-
-
-          const coverResult =
-            await uploadSyncTrackCover(
-              readySession.id,
-              track.id,
-              record.coverBlob
-            );
-
-
-          readySession =
-            coverResult.session;
-
-        }
-
-      } catch (error) {
-
-        console.warn(
-          '同步 MP3 失败：',
-          track.title,
-          error
-        );
-
-
-        failedTracks.push({
-          track,
-          message:
-            error.message
-        });
-
-      }
-
-    }
-
     try {
 
       const latestSession =
@@ -7051,18 +7180,21 @@ async function createPhoneSyncSession() {
         </p>
 
         <p>
-  本地歌曲预传：
-${readySession.uploadedTrackCount || 0}
-/
+  本地歌曲：
 ${localTracks.length}
-首
+首按需同步
 </p>
 <p>
   Bilibili：
   ${tracks.length - localTracks.length}
   首按需同步
 </p>
-
+<p
+  id="syncLocalUploadStatus"
+  class="settings-note"
+>
+  等待手机扫码……
+</p>
 
 <p>
   状态：
@@ -7110,30 +7242,7 @@ ${localTracks.length}
       )}
 </div>
 
-${failedTracks.length
-        ? `
-      <p
-        class="settings-note"
-        style="color: #9b372b;"
-      >
-        ${failedTracks.length} 首上传失败：
-        ${escapeHtml(
-          failedTracks
-            .slice(0, 3)
-            .map(
-              (item) =>
-                item.track.title
-            )
-            .join('、')
-        )}
-        ${failedTracks.length > 3
-          ? '……'
-          : ''
-        }
-      </p>
-    `
-        : ''
-      }
+
         <p style="margin-bottom: 0;">
           有效至：
           ${escapeHtml(
@@ -7179,6 +7288,38 @@ ${failedTracks.length
       );
 
     }
+    /*
+ * 不等待它完成。
+ *
+ * QR 立即显示，
+ * Computer Web 在后台等手机
+ * 报告缺哪些本地文件。
+ */
+    watchPhoneSyncLocalUploads(
+      readySession.id,
+      tracks
+    ).catch(
+      (error) => {
+
+        console.error(
+          '本地歌曲按需同步失败：',
+          error
+        );
+
+
+        const statusElement =
+          $('#syncLocalUploadStatus');
+
+
+        if (statusElement) {
+
+          statusElement.textContent =
+            `本地歌曲发送失败：${error.message}`;
+
+        }
+
+      }
+    );
   } catch (error) {
 
     resultBox.innerHTML = `
