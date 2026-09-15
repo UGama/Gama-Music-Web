@@ -5885,13 +5885,7 @@ async function downloadIncomingSyncSnapshot(
       : [];
 
 
-  if (!tracks.length) {
 
-    throw new Error(
-      '这个同步里没有歌曲。'
-    );
-
-  }
 
 
   /*
@@ -5908,6 +5902,10 @@ async function downloadIncomingSyncSnapshot(
 
 
   const incomingTracks = [];
+
+  let downloadedAudioCount = 0;
+  let reusedAudioCount = 0;
+  let removedTrackCount = 0;
 
 
   for (
@@ -5931,24 +5929,55 @@ async function downloadIncomingSyncSnapshot(
     }
 
 
-    els.modalBody.innerHTML = `
-      <p>
-        正在更新手机音乐……
-      </p>
+    const showIncomingSyncStage =
+      (stage) => {
 
-      <p>
-        <strong>
-          ${index + 1} / ${tracks.length}
-        </strong>
-      </p>
+        if (!els.modalBody) {
+          return;
+        }
 
-      <p class="settings-note">
-        ${escapeHtml(
-      track.title || '未命名歌曲'
-    )}
-      </p>
-    `;
 
+        const percent =
+          tracks.length
+            ? Math.round(
+              (
+                (index + 1) /
+                tracks.length
+              ) * 100
+            )
+            : 100;
+
+
+        els.modalBody.innerHTML = `
+          <p>
+            <strong>
+              ${escapeHtml(stage)}
+            </strong>
+          </p>
+
+          <p>
+            ${index + 1} / ${tracks.length}
+          </p>
+
+          <progress
+            max="100"
+            value="${percent}"
+          ></progress>
+
+          <p class="settings-note">
+            ${escapeHtml(
+          track.title ||
+          '未命名歌曲'
+        )}
+          </p>
+        `;
+
+      };
+
+
+    showIncomingSyncStage(
+      '正在检查手机本地文件……'
+    );
 
     const existing =
       await getOfflineTrack(
@@ -5966,8 +5995,17 @@ async function downloadIncomingSyncSnapshot(
         : null;
 
 
+    if (audioBlob) {
+
+      reusedAudioCount += 1;
+
+    }
+
     if (!audioBlob) {
 
+      showIncomingSyncStage(
+        '正在下载 MP3……'
+      );
       const audioResponse =
         await fetch(
           `${invite.server}` +
@@ -6005,6 +6043,7 @@ async function downloadIncomingSyncSnapshot(
           '收到的 MP3 文件为空。'
         );
 
+        downloadedAudioCount += 1;
       }
 
     }
@@ -6027,6 +6066,9 @@ async function downloadIncomingSyncSnapshot(
       !coverBlob
     ) {
 
+      showIncomingSyncStage(
+        '正在下载封面……'
+      );
       const coverResponse =
         await fetch(
           `${invite.server}` +
@@ -6080,6 +6122,10 @@ async function downloadIncomingSyncSnapshot(
           ? 'local-cover'
           : null
     };
+
+    showIncomingSyncStage(
+      '正在保存到手机……'
+    );
 
 
     /*
@@ -6171,6 +6217,7 @@ async function downloadIncomingSyncSnapshot(
     await deleteOfflineTrack(
       oldTrackId
     );
+    removedTrackCount += 1;
 
 
     /*
@@ -6210,6 +6257,7 @@ async function downloadIncomingSyncSnapshot(
     }
 
   }
+
   /*
    * 手机端采用电脑 Web
    * 发来的播放列表快照。
@@ -6316,6 +6364,18 @@ async function downloadIncomingSyncSnapshot(
   console.log(
     `手机同步完成：${invite.sessionId}`
   );
+  return {
+
+    totalTrackCount:
+      incomingTracks.length,
+
+    downloadedAudioCount,
+
+    reusedAudioCount,
+
+    removedTrackCount
+
+  };
 }
 
 async function findIncomingSyncMissing(
@@ -6492,21 +6552,7 @@ async function waitIncomingSyncPreparation(
       : [];
 
 
-  /*
-   * 手机什么都不缺，
-   * 完全不需要等待。
-   */
-  if (
-    !missingAudioTrackIds.length &&
-    !missingCoverTrackIds.length
-  ) {
 
-    return (
-      report?.session ||
-      null
-    );
-
-  }
 
 
   const deadline =
@@ -6551,6 +6597,119 @@ async function waitIncomingSyncPreparation(
 
     const session =
       data.session || {};
+    /*
+ * 把 Desktop 当前准备进度
+ * 直接显示在手机同步弹窗里。
+ */
+    const preparation =
+      session.preparation || null;
+
+
+    let preparationMessage =
+      '正在准备同步文件……';
+
+
+    let preparationDetail =
+      '请保持这个页面打开。';
+
+
+    if (
+      preparation?.status ===
+      'running'
+    ) {
+
+      const total =
+        Number(
+          preparation.total || 0
+        );
+
+
+      const completed =
+        Number(
+          preparation.completed || 0
+        );
+
+
+      const failed =
+        Number(
+          preparation.failed || 0
+        );
+
+
+      preparationMessage =
+        '正在从 Bilibili 准备缺失歌曲……';
+
+
+      preparationDetail =
+        total
+          ? `${completed} / ${total}` +
+          (
+            failed
+              ? ` · 失败 ${failed}`
+              : ''
+          )
+          : '正在下载……';
+
+    } else if (
+      session.status ===
+      'waiting-web-upload'
+    ) {
+
+      preparationMessage =
+        '正在等待电脑发送本地歌曲……';
+
+
+      preparationDetail =
+        '只会发送手机缺少的文件。';
+
+    } else if (
+      session.status ===
+      'waiting-web-fallback'
+    ) {
+
+      preparationMessage =
+        'Bilibili 下载失败，正在使用电脑副本……';
+
+
+      preparationDetail =
+        '电脑 Web 正在发送本地保存的文件。';
+
+    } else if (
+      session.status ===
+      'missing-ready'
+    ) {
+
+      preparationMessage =
+        '同步文件准备完成。';
+
+
+      preparationDetail =
+        '即将保存到手机……';
+
+    }
+
+
+    if (
+      els.modalBody
+    ) {
+
+      els.modalBody.innerHTML = `
+        <p>
+          <strong>
+            ${escapeHtml(
+        preparationMessage
+      )}
+          </strong>
+        </p>
+
+        <p class="settings-note">
+          ${escapeHtml(
+        preparationDetail
+      )}
+        </p>
+      `;
+
+    }
 
 
     /*
@@ -6800,15 +6959,66 @@ async function openIncomingSyncPreview() {
               invite,
               missingReport
             );
-            await downloadIncomingSyncSnapshot(
-              invite,
-              manifest
-            );
+            const syncResult =
+              await downloadIncomingSyncSnapshot(
+                invite,
+                manifest
+              );
 
 
-            window.alert(
-              '手机音乐更新完成。'
-            );
+            openModal({
+
+              title:
+                '同步完成',
+
+              primaryText:
+                '完成',
+
+              body: `
+    <p>
+      <strong>
+        手机音乐已经更新完成。
+      </strong>
+    </p>
+
+    <p>
+      当前音乐库：
+      ${syncResult.totalTrackCount}
+      首
+    </p>
+
+    <p class="settings-note">
+      新下载 MP3：
+      ${syncResult.downloadedAudioCount}
+      首
+    </p>
+
+    <p class="settings-note">
+      手机原有：
+      ${syncResult.reusedAudioCount}
+      首
+    </p>
+
+    ${syncResult.removedTrackCount
+                  ? `
+          <p class="settings-note">
+            已删除电脑主库中不存在的旧歌曲：
+            ${syncResult.removedTrackCount}
+            首
+          </p>
+        `
+                  : ''
+                }
+
+    <p class="settings-note">
+      同步临时文件已经清理。
+    </p>
+  `,
+
+              onPrimary:
+                async () => { }
+
+            });
 
 
           } catch (error) {
