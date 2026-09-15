@@ -6247,22 +6247,40 @@ async function waitIncomingSyncPreparation(
   report
 ) {
 
-  const bilibiliTrackIds =
+  const missingAudioTrackIds =
     Array.isArray(
-      report?.plan
-        ?.bilibiliAudioTrackIds
+      report?.missing
+        ?.audioTrackIds
     )
-      ? report.plan
-        .bilibiliAudioTrackIds
+      ? report.missing
+        .audioTrackIds
+      : [];
+
+
+  const missingCoverTrackIds =
+    Array.isArray(
+      report?.missing
+        ?.coverTrackIds
+    )
+      ? report.missing
+        .coverTrackIds
       : [];
 
 
   /*
-   * 没有缺 Bilibili MP3，
-   * 不需要等待后台下载。
+   * 手机什么都不缺，
+   * 完全不需要等待。
    */
-  if (!bilibiliTrackIds.length) {
-    return report?.session || null;
+  if (
+    !missingAudioTrackIds.length &&
+    !missingCoverTrackIds.length
+  ) {
+
+    return (
+      report?.session ||
+      null
+    );
+
   }
 
 
@@ -6271,7 +6289,9 @@ async function waitIncomingSyncPreparation(
     5 * 60 * 1000;
 
 
-  while (Date.now() < deadline) {
+  while (
+    Date.now() < deadline
+  ) {
 
     const response =
       await fetch(
@@ -6289,7 +6309,9 @@ async function waitIncomingSyncPreparation(
 
     const data =
       await response.json()
-        .catch(() => ({}));
+        .catch(
+          () => ({})
+        );
 
 
     if (!response.ok) {
@@ -6306,16 +6328,18 @@ async function waitIncomingSyncPreparation(
       data.session || {};
 
 
-    const preparation =
-      session.preparation;
-
-
     /*
-     * Bilibili 按需下载已经全部完成。
+     * 不管文件来自：
+     *
+     * - Bilibili 后台下载
+     * - Computer Web 上传本地 MP3
+     *
+     * 只有手机真正缺的资源全部齐了，
+     * 才允许手机开始下载。
      */
     if (
-      preparation?.status ===
-      'complete'
+      session.status ===
+      'missing-ready'
     ) {
 
       return session;
@@ -6323,20 +6347,13 @@ async function waitIncomingSyncPreparation(
     }
 
 
-    /*
-     * 这一阶段先直接报告错误。
-     *
-     * 后面我们会加入：
-     * Bilibili 失败 → Computer Web
-     * 上传本地已有 MP3 的 fallback。
-     */
     if (
-      preparation?.status ===
-      'partial'
+      session.status ===
+      'missing-partial'
     ) {
 
       throw new Error(
-        '部分缺失歌曲从 Bilibili 重新下载失败。'
+        '部分同步文件准备失败。'
       );
 
     }
@@ -6354,7 +6371,7 @@ async function waitIncomingSyncPreparation(
 
 
   throw new Error(
-    '等待后台准备歌曲超时。'
+    '等待同步文件准备超时。'
   );
 
 }
