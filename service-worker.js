@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v57';
+const CACHE_NAME = 'gama-music-shell-v58';
 const SHELL_ASSETS = [
   './',
   './index.html',

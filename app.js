@@ -6,7 +6,8 @@ const storageKeys = {
   mode: 'gamaMusic.mode',
   selectedPlaylist: 'gamaMusic.selectedPlaylist',
   trackSort: 'gamaMusic.trackSort',
-  sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt'
+  sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt',
+  syncClientId: 'gamaMusic.syncClientId'
 };
 
 const offlineDb = {
@@ -515,6 +516,58 @@ function getRelayAccessKey() {
       storageKeys.relayAccessKey
     ) || ''
   ).trim();
+
+}
+
+function getSyncClientId() {
+
+  let clientId =
+    String(
+      localStorage.getItem(
+        storageKeys.syncClientId
+      ) || ''
+    ).trim();
+
+
+  if (clientId) {
+    return clientId;
+  }
+
+
+  /*
+   * 每个浏览器 / PWA 安装
+   * 生成一个固定身份。
+   *
+   * 以后后台用它判断：
+   * 这个二维码是不是已经
+   * 被另一台手机占用了。
+   */
+  if (
+    globalThis.crypto &&
+    typeof globalThis.crypto.randomUUID ===
+    'function'
+  ) {
+
+    clientId =
+      `phone-${crypto.randomUUID()}`;
+
+  } else {
+
+    clientId =
+      `phone-${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}`;
+
+  }
+
+
+  localStorage.setItem(
+    storageKeys.syncClientId,
+    clientId
+  );
+
+
+  return clientId;
 
 }
 
@@ -4053,10 +4106,33 @@ function openModal({ title, body, primaryText = '保存', onPrimary }) {
   els.modalBody.innerHTML = body;
   els.modalPrimaryButton.textContent = primaryText;
   els.modal.classList.remove('hidden');
-  els.modalPrimaryButton.onclick = async () => {
-    await onPrimary?.();
-    closeModal();
-  };
+  const primaryHandler =
+    async () => {
+
+      await onPrimary?.();
+
+
+      /*
+       * 如果 onPrimary 里面又打开了
+       * 一个新的 Modal，
+       * 新 Modal 会拥有新的 onclick。
+       *
+       * 这时不要把新 Modal 关掉。
+       */
+      if (
+        els.modalPrimaryButton.onclick ===
+        primaryHandler
+      ) {
+
+        closeModal();
+
+      }
+
+    };
+
+
+  els.modalPrimaryButton.onclick =
+    primaryHandler;
   const input =
     els.modalBody.querySelector(
       'input[type="text"], input[type="url"], input[type="search"], input:not([type])'
@@ -5842,7 +5918,18 @@ async function completeIncomingSync(
       `/complete`,
       {
         method:
-          'POST'
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            clientId:
+              getSyncClientId()
+          })
       }
     );
 
@@ -6017,7 +6104,10 @@ async function downloadIncomingSyncSnapshot(
           `${encodeURIComponent(
             trackId
           )}` +
-          `/audio`,
+          `/audio` +
+          `?clientId=${encodeURIComponent(
+            getSyncClientId()
+          )}`,
           {
             cache: 'no-store'
           }
@@ -6043,8 +6133,9 @@ async function downloadIncomingSyncSnapshot(
           '收到的 MP3 文件为空。'
         );
 
-        downloadedAudioCount += 1;
+
       }
+      downloadedAudioCount += 1;
 
     }
 
@@ -6080,7 +6171,10 @@ async function downloadIncomingSyncSnapshot(
           `${encodeURIComponent(
             trackId
           )}` +
-          `/cover`,
+          `/cover` +
+          `?clientId=${encodeURIComponent(
+            getSyncClientId()
+          )}`,
           {
             cache: 'no-store'
           }
@@ -6341,9 +6435,6 @@ async function downloadIncomingSyncSnapshot(
    * 手机已经安全保存完毕。
    * 通知 Desktop 立即删除临时文件。
    */
-  await completeIncomingSync(
-    invite
-  );
 
 
   await completeIncomingSync(
@@ -6481,9 +6572,12 @@ async function reportIncomingSyncMissing(
         },
 
         body:
-          JSON.stringify(
-            missing
-          )
+          JSON.stringify({
+            ...missing,
+
+            clientId:
+              getSyncClientId()
+          })
       }
     );
 
