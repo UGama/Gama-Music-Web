@@ -1063,7 +1063,7 @@ input[type="range"] {
   .mode-row {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(5, 34px);
+    grid-template-columns: repeat(6, 34px);
     justify-content: center;
     align-items: center;
     width: 100%;
@@ -2254,4 +2254,100 @@ input[type="range"] {
   width: 100%;
 
   margin-top: 12px;
+}
+
+/*
+ * 定时关闭按钮只给手机播放器使用。
+ */
+#sleepTimerButton {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  #sleepTimerButton {
+    display: grid;
+  }
+}
+
+.advanced-settings {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.advanced-settings summary {
+  padding: 13px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.advanced-settings-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 13px 13px;
+}
+
+.status-card {
+  position: relative;
+}
+
+.status-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+
+  display: grid;
+  place-items: center;
+
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+
+  color: var(--muted);
+  background: transparent;
+
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.status-dismiss+div {
+  padding-right: 28px;
+}
+
+@media (max-width: 719px) {
+  body.mobile-player-mode .desktop-only-setting {
+    display: none !important;
+  }
+}
+
+@media (max-width: 719px) {
+
+  body.mobile-player-mode .advanced-settings {
+    display: none !important;
+  }
+
+  body.mobile-player-mode .settings-modal .modal-actions {
+    display: none;
+  }
+
+}
+
+@media (max-width: 719px) {
+
+  body.mobile-player-mode #sleepTimerButton.active {
+    color: #ffffff;
+    background: var(--teal-strong);
+    border-color: var(--teal-strong);
+    box-shadow:
+      0 3px 9px rgba(36, 83, 188, 0.22);
+  }
+
 }

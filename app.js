@@ -179,6 +179,7 @@ function initElements() {
     playPauseIcon: $('#playPauseIcon'),
     prevButton: $('#prevButton'),
     nextButton: $('#nextButton'),
+    sleepTimerButton: $('#sleepTimerButton'),
     nowTitle: $('#nowTitle'),
     nowMeta: $('#nowMeta'),
     currentTime: $('#currentTime'),
@@ -751,12 +752,73 @@ function setConnection(text, ok = true) {
 }
 
 function setStatus(message, type = 'info', progress = null) {
-  const content = `<div>${escapeHtml(message)}</div>${progress === null ? '' : `<progress max="100" value="${progress}"></progress>`}`;
-  [els.downloadStatus, els.mobileStatus].filter(Boolean).forEach((element) => {
-    element.hidden = false;
-    element.classList.toggle('warning', type === 'warning');
-    element.innerHTML = content;
-  });
+
+  const dismissible =
+    progress === null ||
+    progress >= 100;
+
+
+  const content =
+    (
+      dismissible
+        ? `
+          <button
+            class="status-dismiss"
+            type="button"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        `
+        : ''
+    ) +
+    `<div>${escapeHtml(message)}</div>` +
+    (
+      progress === null
+        ? ''
+        : `<progress max="100" value="${progress}"></progress>`
+    );
+
+
+  [
+    els.downloadStatus,
+    els.mobileStatus
+  ]
+    .filter(Boolean)
+    .forEach(
+      (element) => {
+
+        element.hidden = false;
+
+        element.classList.toggle(
+          'warning',
+          type === 'warning'
+        );
+
+        element.innerHTML =
+          content;
+
+
+        element
+          .querySelector(
+            '.status-dismiss'
+          )
+          ?.addEventListener(
+            'click',
+            () => {
+
+              element.hidden =
+                true;
+
+              element.innerHTML =
+                '';
+
+            }
+          );
+
+      }
+    );
+
 }
 
 function clearStatus() {
@@ -815,19 +877,74 @@ function syncPlaylistSaveButtons() {
   });
 }
 
-function setFavoriteStatus(message, type = 'info', progress = null) {
-  const element = els.favoriteImportStatus;
+function setFavoriteStatus(
+  message,
+  type = 'info',
+  progress = null
+) {
 
-  if (!element) return;
+  const element =
+    els.favoriteImportStatus;
 
-  element.hidden = false;
-  element.classList.toggle('warning', type === 'warning');
+
+  if (!element) {
+    return;
+  }
+
+
+  const dismissible =
+    progress === null ||
+    progress >= 100;
+
+
+  element.hidden =
+    false;
+
+  element.classList.toggle(
+    'warning',
+    type === 'warning'
+  );
+
 
   element.innerHTML =
+    (
+      dismissible
+        ? `
+          <button
+            class="status-dismiss"
+            type="button"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        `
+        : ''
+    ) +
     `<div>${escapeHtml(message)}</div>` +
-    (progress === null
-      ? ''
-      : `<progress max="100" value="${progress}"></progress>`);
+    (
+      progress === null
+        ? ''
+        : `<progress max="100" value="${progress}"></progress>`
+    );
+
+
+  element
+    .querySelector(
+      '.status-dismiss'
+    )
+    ?.addEventListener(
+      'click',
+      () => {
+
+        element.hidden =
+          true;
+
+        element.innerHTML =
+          '';
+
+      }
+    );
+
 }
 
 function escapeHtml(value) {
@@ -4102,6 +4219,16 @@ function setMode(mode) {
 }
 
 function openModal({ title, body, primaryText = '保存', onPrimary }) {
+
+  /*
+   * 每次打开普通弹窗时，
+   * 先清掉“设置弹窗”标记。
+   */
+  els.modal.classList.remove(
+    'settings-modal'
+  );
+
+
   els.modalTitle.textContent = title;
   els.modalBody.innerHTML = body;
   els.modalPrimaryButton.textContent = primaryText;
@@ -5031,6 +5158,46 @@ async function importLocalMp3Files(fileList) {
   };
 }
 
+function updateSleepTimerButton() {
+
+  const button =
+    els.sleepTimerButton;
+
+
+  if (!button) {
+    return;
+  }
+
+
+  const active =
+    Boolean(
+      state.sleepTimerEndAt &&
+      state.sleepTimerEndAt >
+      Date.now()
+    );
+
+
+  button.classList.toggle(
+    'active',
+    active
+  );
+
+
+  button.setAttribute(
+    'aria-pressed',
+    active
+      ? 'true'
+      : 'false'
+  );
+
+
+  button.title =
+    active
+      ? sleepTimerSummary()
+      : '定时关闭';
+
+}
+
 function clearSleepTimer() {
 
   state.sleepTimerEndAt =
@@ -5040,6 +5207,9 @@ function clearSleepTimer() {
   localStorage.removeItem(
     storageKeys.sleepTimerEndAt
   );
+
+
+  updateSleepTimerButton();
 
 }
 
@@ -5075,6 +5245,9 @@ function setSleepTimer(
       state.sleepTimerEndAt
     )
   );
+
+
+  updateSleepTimerButton();
 
 }
 
@@ -5127,6 +5300,94 @@ function sleepTimerSummary() {
 
 }
 
+function openSleepTimer() {
+
+  openModal({
+
+    title:
+      '定时关闭',
+
+    primaryText:
+      '应用',
+
+    body: `
+      <p class="settings-note">
+        ${escapeHtml(
+      sleepTimerSummary()
+    )}
+      </p>
+
+      <label class="field">
+        <span>
+          播放多久后暂停
+        </span>
+
+        <select id="playerSleepTimerSelect">
+
+          <option value="keep">
+            保持当前设置
+          </option>
+
+          <option value="15">
+            15 分钟
+          </option>
+
+          <option value="30">
+            30 分钟
+          </option>
+
+          <option value="45">
+            45 分钟
+          </option>
+
+          <option value="60">
+            60 分钟
+          </option>
+
+          <option value="90">
+            90 分钟
+          </option>
+
+          <option value="off">
+            关闭定时器
+          </option>
+
+        </select>
+      </label>
+    `,
+
+    onPrimary:
+      () => {
+
+        const choice =
+          $('#playerSleepTimerSelect')
+            ?.value ||
+          'keep';
+
+
+        if (
+          choice ===
+          'off'
+        ) {
+
+          clearSleepTimer();
+
+        } else if (
+          choice !==
+          'keep'
+        ) {
+
+          setSleepTimer(
+            Number(choice)
+          );
+
+        }
+
+      }
+
+  });
+
+}
 
 function checkSleepTimer() {
 
@@ -6731,7 +6992,7 @@ async function waitIncomingSyncPreparation(
 
 
       preparationMessage =
-        '正在从 Bilibili 准备缺失歌曲……';
+        '正在准备需要同步的歌曲……';
 
 
       preparationDetail =
@@ -7397,7 +7658,7 @@ async function watchPhoneSyncLocalUploads(
       if (statusElement) {
 
         statusElement.textContent =
-          '手机已报告缺失内容，后台正在准备 Bilibili 文件……';
+          '正在准备手机需要的歌曲……';
 
       }
 
@@ -8038,11 +8299,50 @@ function openSettings() {
 
     body: `
 
-      <label class="field">
+      <div class="field">
 
         <span>
-          导入本地 MP3
+          手机同步
         </span>
+
+        <p class="settings-note">
+          将当前电脑 Web 音乐库同步到手机。
+        </p>
+
+        <button
+  id="createSyncSessionButton"
+  class="secondary-button"
+  type="button"
+  ${isMobilePlayerMode() ? 'hidden' : ''}
+>
+  创建手机同步
+</button>
+
+        <button
+  id="scanSyncQrButton"
+  class="secondary-button"
+  type="button"
+  ${isMobilePlayerMode() ? '' : 'hidden'}
+>
+  扫描二维码更新
+</button>
+
+        <div
+          id="syncSessionResult"
+          style="margin-top: 12px;"
+        ></div>
+
+      </div>
+
+
+      <hr>
+
+
+      <label class="field desktop-only-setting">
+
+  <span>
+    导入本地 MP3
+  </span>
 
         <input
           id="localMp3Input"
@@ -8055,72 +8355,19 @@ function openSettings() {
 
 
       <p
-  id="backupStatus"
-  class="settings-note"
+  id="localImportStatus"
+  class="settings-note desktop-only-setting"
 >
-  备份包含本地 MP3、封面、歌单和歌曲信息。
+  可一次导入一个或多个 MP3 文件。
 </p>
 
 
-      <hr>
 
-
-      <label class="field">
-
-        <span>
-          定时关闭
-        </span>
-
-        <select
-          id="sleepTimerSelect"
-        >
-
-          <option value="keep">
-            保持当前设置
-          </option>
-
-          <option value="1">
-  1 分钟后暂停（测试）
-</option>
-          <option value="15">
-            15 分钟后暂停
-          </option>
-
-          <option value="30">
-            30 分钟后暂停
-          </option>
-
-          <option value="45">
-            45 分钟后暂停
-          </option>
-
-          <option value="60">
-            60 分钟后暂停
-          </option>
-
-          <option value="90">
-            90 分钟后暂停
-          </option>
-
-          <option value="off">
-            关闭定时器
-          </option>
-
-        </select>
-
-      </label>
-
-
-      <p class="settings-note">
-        ${escapeHtml(
-      sleepTimerSummary()
-    )}
-      </p>
 
 
       <hr>
 
-<div class="field">
+<div class="field desktop-only-setting">
 
   <span>
     备份与恢复
@@ -8145,7 +8392,7 @@ function openSettings() {
 
 <p
   id="backupStatus"
-  class="settings-note"
+  class="settings-note desktop-only-setting"
 >
   备份包含本地 MP3、封面、歌单和歌曲信息。
 </p>
@@ -8153,29 +8400,36 @@ function openSettings() {
       <hr>
 
 
-      <label class="field">
+            <details class="advanced-settings">
 
-        <span>
-         共享后台地址
-        </span>
+        <summary>
+          高级设置
+        </summary>
 
-        <input
-          id="apiBaseInput"
-          type="url"
-          placeholder="可选"
-          value="${escapeHtml(current)}"
-        >
+        <div class="advanced-settings-body">
 
-      </label>
+          <label class="field">
+
+            <span>
+              共享后台地址
+            </span>
+
+            <input
+              id="apiBaseInput"
+              type="url"
+              placeholder="可选"
+              value="${escapeHtml(current)}"
+            >
+
+          </label>
 
 
-      <p class="settings-note">
-        后台地址可以留空。
-        留空时 Gama Music Web 只使用当前浏览器的本地音乐库。
-      </p>
+          <p class="settings-note">
+            通常不需要修改。
+          </p>
 
 
-            ${isHttpsPage
+          ${isHttpsPage
         ? `
             <p class="settings-note">
               当前页面使用 HTTPS。
@@ -8186,68 +8440,34 @@ function openSettings() {
       }
 
 
-      <label class="field">
+          <label class="field">
 
-        <span>
-          后台访问密码
-        </span>
+            <span>
+              后台访问密码
+            </span>
 
-        <input
-          id="relayAccessKeyInput"
-          type="password"
-          placeholder="可选"
-          autocomplete="off"
-          value="${escapeHtml(
+            <input
+              id="relayAccessKeyInput"
+              type="password"
+              placeholder="可选"
+              autocomplete="off"
+              value="${escapeHtml(
         currentRelayAccessKey
       )}"
-        >
+            >
 
-      </label>
-
-
-      <p class="settings-note">
-        连接共享后台时需要。
-        密码只保存在当前浏览器中。
-      </p>
+          </label>
 
 
-      <hr>
+          <p class="settings-note">
+            仅在需要修改共享后台连接时使用。
+          </p>
+
+        </div>
+
+      </details>
 
 
-      <div class="field">
-
-        <span>
-          手机同步
-        </span>
-
-        <p class="settings-note">
-          将当前电脑 Web 音乐库同步到手机。
-        </p>
-
-        <button
-          id="createSyncSessionButton"
-          class="secondary-button"
-          type="button"
-        >
-          创建手机同步
-        </button>
-
-        <button
-  id="scanSyncQrButton"
-  class="secondary-button"
-  type="button"
-  style="
-    margin-top: 10px;
-  "
->
-  扫描二维码更新
-</button>
-        <div
-          id="syncSessionResult"
-          style="margin-top: 12px;"
-        ></div>
-
-      </div>
 
     `,
 
@@ -8255,31 +8475,7 @@ function openSettings() {
     onPrimary:
       async () => {
 
-        const sleepChoice =
-          $('#sleepTimerSelect')
-            ?.value ||
-          'keep';
 
-
-        if (
-          sleepChoice ===
-          'off'
-        ) {
-
-          clearSleepTimer();
-
-        } else if (
-          sleepChoice !==
-          'keep'
-        ) {
-
-          setSleepTimer(
-            Number(
-              sleepChoice
-            )
-          );
-
-        }
 
 
         const next =
@@ -8337,6 +8533,9 @@ function openSettings() {
   });
 
 
+  els.modal.classList.add(
+    'settings-modal'
+  );
   /*
    * 本地 MP3 导入。
    */
@@ -9270,6 +9469,11 @@ function bindEvents() {
       createPlaylist
     );
   els.settingsButton.addEventListener('click', openSettings);
+  els.sleepTimerButton
+    ?.addEventListener(
+      'click',
+      openSleepTimer
+    );
   els.playAllButton.addEventListener(
     'click',
     async () => {
@@ -9387,9 +9591,118 @@ function configureMediaSessionActions() {
   }
 }
 
-function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('./service-worker.js').catch(() => { });
+async function registerServiceWorker() {
+
+  if (
+    !('serviceWorker' in navigator)
+  ) {
+    return;
+  }
+
+
+  /*
+   * 页面原本已经由 Service Worker 控制时，
+   * 如果新的版本接管，
+   * 自动刷新一次进入最新版。
+   *
+   * 第一次安装 PWA 时不刷新。
+   */
+  const hadController =
+    Boolean(
+      navigator.serviceWorker.controller
+    );
+
+
+  let reloading =
+    false;
+
+
+  navigator.serviceWorker.addEventListener(
+    'controllerchange',
+    () => {
+
+      if (
+        !hadController ||
+        reloading
+      ) {
+        return;
+      }
+
+
+      reloading =
+        true;
+
+
+      window.location.reload();
+
+    }
+  );
+
+
+  try {
+
+    const registration =
+      await navigator.serviceWorker.register(
+        './service-worker.js'
+      );
+
+
+    /*
+     * 每次打开 Gama Music
+     * 主动检查一次新版本。
+     */
+    registration
+      .update()
+      .catch(() => { });
+
+
+    /*
+     * 从后台重新切回 App 时，
+     * 再检查一次。
+     */
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+
+        if (
+          document.hidden
+        ) {
+          return;
+        }
+
+
+        registration
+          .update()
+          .catch(() => { });
+
+      }
+    );
+
+
+    /*
+     * App 一直保持打开时，
+     * 每 30 分钟检查一次。
+     */
+    window.setInterval(
+      () => {
+
+        registration
+          .update()
+          .catch(() => { });
+
+      },
+      30 * 60 * 1000
+    );
+
+  } catch (error) {
+
+    console.warn(
+      'Service Worker 注册失败：',
+      error
+    );
+
+  }
+
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
