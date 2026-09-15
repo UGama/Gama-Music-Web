@@ -6242,6 +6242,123 @@ async function reportIncomingSyncMissing(
 
 }
 
+async function waitIncomingSyncPreparation(
+  invite,
+  report
+) {
+
+  const bilibiliTrackIds =
+    Array.isArray(
+      report?.plan
+        ?.bilibiliAudioTrackIds
+    )
+      ? report.plan
+        .bilibiliAudioTrackIds
+      : [];
+
+
+  /*
+   * 没有缺 Bilibili MP3，
+   * 不需要等待后台下载。
+   */
+  if (!bilibiliTrackIds.length) {
+    return report?.session || null;
+  }
+
+
+  const deadline =
+    Date.now() +
+    5 * 60 * 1000;
+
+
+  while (Date.now() < deadline) {
+
+    const response =
+      await fetch(
+        `${invite.server}` +
+        `/api/sync/sessions/` +
+        `${encodeURIComponent(
+          invite.sessionId
+        )}`,
+        {
+          cache:
+            'no-store'
+        }
+      );
+
+
+    const data =
+      await response.json()
+        .catch(() => ({}));
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data?.error ||
+        `检查同步准备状态失败：${response.status}`
+      );
+
+    }
+
+
+    const session =
+      data.session || {};
+
+
+    const preparation =
+      session.preparation;
+
+
+    /*
+     * Bilibili 按需下载已经全部完成。
+     */
+    if (
+      preparation?.status ===
+      'complete'
+    ) {
+
+      return session;
+
+    }
+
+
+    /*
+     * 这一阶段先直接报告错误。
+     *
+     * 后面我们会加入：
+     * Bilibili 失败 → Computer Web
+     * 上传本地已有 MP3 的 fallback。
+     */
+    if (
+      preparation?.status ===
+      'partial'
+    ) {
+
+      throw new Error(
+        '部分缺失歌曲从 Bilibili 重新下载失败。'
+      );
+
+    }
+
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          1500
+        )
+    );
+
+  }
+
+
+  throw new Error(
+    '等待后台准备歌曲超时。'
+  );
+
+}
+
 async function openIncomingSyncPreview() {
 
   const invite =
@@ -6341,13 +6458,11 @@ async function openIncomingSyncPreview() {
       );
 
 
-    /*
-     * 把缺失清单告诉 Desktop。
-     */
-    await reportIncomingSyncMissing(
-      invite,
-      missing
-    );
+    const missingReport =
+      await reportIncomingSyncMissing(
+        invite,
+        missing
+      );
 
 
     const existingAudioCount =
@@ -6439,6 +6554,10 @@ async function openIncomingSyncPreview() {
 
           try {
 
+            await waitIncomingSyncPreparation(
+              invite,
+              missingReport
+            );
             await downloadIncomingSyncSnapshot(
               invite,
               manifest
@@ -6509,41 +6628,29 @@ function isSyncSessionReady(
   session
 ) {
 
-  if (!session) {
+  if (!session?.id) {
     return false;
   }
 
 
-  const trackCount =
-    Number(
-      session.trackCount || 0
-    );
-
-
-  const uploadedTrackCount =
-    Number(
-      session.uploadedTrackCount || 0
-    );
-
-
-  const expectedCoverCount =
-    Number(
-      session.expectedCoverCount || 0
-    );
-
-
-  const uploadedCoverCount =
-    Number(
-      session.uploadedCoverCount || 0
-    );
-
-
-  return (
-    uploadedTrackCount >=
-    trackCount &&
-
-    uploadedCoverCount >=
-    expectedCoverCount
+  /*
+   * 新架构：
+   *
+   * QR 只需要 manifest 已经建立。
+   *
+   * Bilibili MP3 不需要在创建二维码时
+   * 全部上传。
+   */
+  return [
+    'manifest-ready',
+    'uploading',
+    'ready',
+    'missing-reported',
+    'missing-ready',
+    'waiting-web-upload',
+    'missing-partial'
+  ].includes(
+    session.status
   );
 
 }
@@ -6724,6 +6831,27 @@ async function createPhoneSyncSession() {
     let readySession =
       manifestResult.session;
 
+    /*
+ * 本地导入的歌曲没有网络来源，
+ * 所以暂时仍然在创建二维码时
+ * 上传到 Desktop。
+ *
+ * Bilibili 歌曲只发送 manifest。
+ */
+    const localTracks =
+      tracks.filter(
+        (track) =>
+          String(
+            track?.source?.type || ''
+          ).toLowerCase() ===
+          'local' ||
+          String(
+            track?.id || ''
+          ).startsWith(
+            'local-'
+          )
+      );
+
 
     /*
  * 一首一首上传。
@@ -6737,18 +6865,18 @@ async function createPhoneSyncSession() {
 
     for (
       let index = 0;
-      index < tracks.length;
+      index < localTracks.length;
       index += 1
     ) {
 
       const track =
-        tracks[index];
+        localTracks[index];
 
 
       resultBox.innerHTML = `
         <p class="settings-note">
           正在上传 MP3：
-          ${index + 1} / ${tracks.length}
+          ${index + 1} / ${localTracks.length}
         </p>
 
         <p class="settings-note">
@@ -6796,7 +6924,7 @@ async function createPhoneSyncSession() {
           resultBox.innerHTML = `
             <p class="settings-note">
               正在上传封面：
-              ${index + 1} / ${tracks.length}
+              ${index + 1} / ${localTracks.length}
             </p>
 
             <p class="settings-note">
@@ -6906,18 +7034,18 @@ async function createPhoneSyncSession() {
         </p>
 
         <p>
-  已上传：
-  ${readySession.uploadedTrackCount || 0}
-  /
-  ${readySession.trackCount || 0}
-  首 MP3
+  本地歌曲预传：
+${readySession.uploadedTrackCount || 0}
+/
+${localTracks.length}
+首
 </p>
 <p>
-  封面：
-  ${readySession.uploadedCoverCount || 0}
-  /
-  ${readySession.expectedCoverCount || 0}
+  Bilibili：
+  ${tracks.length - localTracks.length}
+  首按需同步
 </p>
+
 
 <p>
   状态：
