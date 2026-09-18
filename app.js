@@ -1,8 +1,11 @@
 'use strict';
+const DEFAULT_API_BASE =
+  'https://gamas-macbook-pro.tailb567af.ts.net';
 
 const storageKeys = {
   apiBase: 'gamaMusic.apiBase',
   relayAccessKey: 'gamaMusic.relayAccessKey',
+  accessToken: 'gamaMusic.accessToken',
   mode: 'gamaMusic.mode',
   selectedPlaylist: 'gamaMusic.selectedPlaylist',
   trackSort: 'gamaMusic.trackSort',
@@ -507,7 +510,43 @@ function renderOfflineSummary() {
 }
 
 function getApiBase() {
-  return (localStorage.getItem(storageKeys.apiBase) || '').trim().replace(/\/$/, '');
+
+  const saved =
+    (
+      localStorage.getItem(
+        storageKeys.apiBase
+      ) || ''
+    )
+      .trim()
+      .replace(/\/$/, '');
+
+
+  /*
+   * 旧版曾使用 Cloudflare Quick Tunnel。
+   * 这种地址每次重启都会变化，
+   * 所以检测到旧地址时自动丢弃，
+   * 改用现在的固定后台地址。
+   */
+  if (
+    saved.includes(
+      '.trycloudflare.com'
+    )
+  ) {
+
+    localStorage.removeItem(
+      storageKeys.apiBase
+    );
+
+    return DEFAULT_API_BASE;
+
+  }
+
+
+  return (
+    saved ||
+    DEFAULT_API_BASE
+  );
+
 }
 
 function getRelayAccessKey() {
@@ -517,6 +556,32 @@ function getRelayAccessKey() {
       storageKeys.relayAccessKey
     ) || ''
   ).trim();
+
+}
+
+function getClientAccessToken() {
+
+  return (
+    localStorage.getItem(
+      storageKeys.accessToken
+    ) || ''
+  ).trim();
+
+}
+
+
+function getApiAccessToken() {
+
+  /*
+   * 新朋友授权优先使用独立 Access Token。
+   *
+   * 如果还没有朋友 Token，
+   * 再兼容旧版后台访问密码。
+   */
+  return (
+    getClientAccessToken() ||
+    getRelayAccessKey()
+  );
 
 }
 
@@ -577,17 +642,17 @@ async function api(path, options = {}) {
     ...(options.headers || {})
   };
 
-  const relayAccessKey =
-    getRelayAccessKey();
+  const accessToken =
+    getApiAccessToken();
 
 
   if (
-    relayAccessKey &&
+    accessToken &&
     !headers.Authorization
   ) {
 
     headers.Authorization =
-      `Bearer ${relayAccessKey}`;
+      `Bearer ${accessToken}`;
 
   }
   if (
@@ -5526,10 +5591,10 @@ async function uploadSyncTrackAudio(
               blob.type ||
               'image/jpeg',
 
-            ...(getRelayAccessKey()
+            ...(getApiAccessToken()
               ? {
                 Authorization:
-                  `Bearer ${getRelayAccessKey()}`
+                  `Bearer ${getApiAccessToken()}`
               }
               : {})
           },
@@ -5631,10 +5696,10 @@ async function uploadSyncTrackCover(
               blob.type ||
               'audio/mpeg',
 
-            ...(getRelayAccessKey()
+            ...(getApiAccessToken()
               ? {
                 Authorization:
-                  `Bearer ${getRelayAccessKey()}`
+                  `Bearer ${getApiAccessToken()}`
               }
               : {})
           },
@@ -8285,6 +8350,10 @@ function openSettings() {
     getRelayAccessKey();
 
 
+  const currentClientAccessToken =
+    getClientAccessToken();
+
+
   const isHttpsPage =
     location.protocol === 'https:';
 
@@ -8298,6 +8367,54 @@ function openSettings() {
       '保存',
 
     body: `
+
+      <div
+        class="field desktop-only-setting"
+      >
+
+        <span>
+          朋友访问
+        </span>
+
+        <p
+          id="friendAccessStatus"
+          class="settings-note"
+        >
+          ${
+            currentClientAccessToken
+              ? '这台浏览器已经连接 Gama Music。'
+              : '第一次使用时输入管理员发送的邀请码。'
+          }
+        </p>
+
+        ${
+          currentClientAccessToken
+            ? ''
+            : `
+              <input
+                id="friendInviteCodeInput"
+                type="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                placeholder="XXXX-XXXX-XXXX"
+              >
+
+              <button
+                id="redeemInviteButton"
+                class="secondary-button"
+                type="button"
+              >
+                连接 Gama Music
+              </button>
+            `
+        }
+
+      </div>
+
+
+      <hr class="desktop-only-setting">
+
 
       <div class="field">
 
@@ -8536,6 +8653,142 @@ function openSettings() {
   els.modal.classList.add(
     'settings-modal'
   );
+
+
+  /*
+   * 第一次朋友授权。
+   */
+  const redeemInviteButton =
+    $('#redeemInviteButton');
+
+
+  redeemInviteButton
+    ?.addEventListener(
+      'click',
+      async () => {
+
+        const input =
+          $('#friendInviteCodeInput');
+
+        const status =
+          $('#friendAccessStatus');
+
+
+        const code =
+          String(
+            input?.value || ''
+          )
+            .toUpperCase()
+            .replace(
+              /[^A-Z0-9]/g,
+              ''
+            );
+
+
+        if (code.length !== 12) {
+
+          status.textContent =
+            '请输入完整的 12 位邀请码。';
+
+          return;
+
+        }
+
+
+        const formattedCode =
+          [
+            code.slice(0, 4),
+            code.slice(4, 8),
+            code.slice(8, 12)
+          ].join('-');
+
+
+        redeemInviteButton.disabled =
+          true;
+
+        redeemInviteButton.textContent =
+          '正在连接……';
+
+        status.textContent =
+          '正在验证邀请码……';
+
+
+        try {
+
+          const result =
+            await api(
+              '/api/access/redeem',
+              {
+                method:
+                  'POST',
+
+                body: {
+                  code:
+                    formattedCode,
+
+                  name:
+                    'Gama Music Web'
+                }
+              }
+            );
+
+
+          const accessToken =
+            String(
+              result?.accessToken ||
+              ''
+            ).trim();
+
+
+          if (!accessToken) {
+
+            throw new Error(
+              '后台没有返回设备授权'
+            );
+
+          }
+
+
+          localStorage.setItem(
+            storageKeys.accessToken,
+            accessToken
+          );
+
+
+          status.textContent =
+            '连接成功，这台浏览器以后不需要再次输入邀请码。';
+
+
+          input.hidden =
+            true;
+
+          redeemInviteButton.hidden =
+            true;
+
+
+          await checkServerConnection();
+
+          await loadLibrary();
+
+        } catch (error) {
+
+          status.textContent =
+            error?.message ||
+            '邀请码连接失败';
+
+
+          redeemInviteButton.disabled =
+            false;
+
+          redeemInviteButton.textContent =
+            '连接 Gama Music';
+
+        }
+
+      }
+    );
+
+
   /*
    * 本地 MP3 导入。
    */

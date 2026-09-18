@@ -2338,6 +2338,10 @@ input[type="range"] {
     display: none;
   }
 
+  body.mobile-player-mode .settings-modal hr {
+    display: none;
+  }
+
 }
 
 @media (max-width: 719px) {
