@@ -726,6 +726,32 @@ async function api(path, options = {}) {
 
   if (!response.ok) {
 
+    /*
+     * 朋友设备的 Access Token
+     * 被 Desktop 撤销以后，
+     * 后台会返回 401。
+     *
+     * 自动删除失效 Token，
+     * 下次打开设置时就会重新显示
+     * 邀请码输入框。
+     */
+    if (
+      response.status === 401 &&
+      getClientAccessToken()
+    ) {
+
+      localStorage.removeItem(
+        storageKeys.accessToken
+      );
+
+
+      throw new Error(
+        '这台设备的授权已失效，请在设置中重新输入邀请码。'
+      );
+
+    }
+
+
     throw new Error(
       data?.error ||
       `请求失败：${response.status}`
@@ -5646,6 +5672,23 @@ async function uploadSyncTrackAudio(
 
   if (!response.ok) {
 
+    if (
+      response.status === 401 &&
+      getClientAccessToken()
+    ) {
+
+      localStorage.removeItem(
+        storageKeys.accessToken
+      );
+
+
+      throw new Error(
+        '这台设备的授权已失效，请在设置中重新输入邀请码。'
+      );
+
+    }
+
+
     throw new Error(
       data?.error ||
       `MP3 上传失败：${response.status}`
@@ -5744,6 +5787,23 @@ async function uploadSyncTrackCover(
 
 
   if (!response.ok) {
+
+    if (
+      response.status === 401 &&
+      getClientAccessToken()
+    ) {
+
+      localStorage.removeItem(
+        storageKeys.accessToken
+      );
+
+
+      throw new Error(
+        '这台设备的授权已失效，请在设置中重新输入邀请码。'
+      );
+
+    }
+
 
     throw new Error(
       data?.error ||
@@ -8380,17 +8440,23 @@ function openSettings() {
           id="friendAccessStatus"
           class="settings-note"
         >
-          ${
-            currentClientAccessToken
-              ? '这台浏览器已经连接 Gama Music。'
-              : '第一次使用时输入管理员发送的邀请码。'
-          }
+          ${currentClientAccessToken
+        ? '这台浏览器已经连接 Gama Music。'
+        : '第一次使用时输入管理员发送的邀请码。'
+      }
         </p>
 
-        ${
-          currentClientAccessToken
-            ? ''
-            : `
+        ${currentClientAccessToken
+        ? `
+              <button
+                id="clearClientAccessButton"
+                class="secondary-button"
+                type="button"
+              >
+                清除当前授权
+              </button>
+            `
+        : `
               <input
                 id="friendInviteCodeInput"
                 type="text"
@@ -8408,7 +8474,7 @@ function openSettings() {
                 连接 Gama Music
               </button>
             `
-        }
+      }
 
       </div>
 
@@ -8755,6 +8821,19 @@ function openSettings() {
           );
 
 
+          /*
+           * 这台浏览器已经正式使用
+           * 独立朋友 Access Token。
+           *
+           * 删除以前可能残留的共享后台密码，
+           * 防止朋友 Token 被撤销以后
+           * 又自动退回旧密码继续访问。
+           */
+          localStorage.removeItem(
+            storageKeys.relayAccessKey
+          );
+
+
           status.textContent =
             '连接成功，这台浏览器以后不需要再次输入邀请码。';
 
@@ -8788,7 +8867,97 @@ function openSettings() {
       }
     );
 
+  /*
+ * 主动清除这台浏览器的朋友授权。
+ *
+ * 先通知后台撤销，
+ * 成功以后再删除本地 Token。
+ */
+  const clearClientAccessButton =
+    $('#clearClientAccessButton');
 
+
+  clearClientAccessButton
+    ?.addEventListener(
+      'click',
+      async () => {
+
+        const confirmed =
+          window.confirm(
+            '确定清除这台浏览器的当前授权吗？之后需要重新输入邀请码。'
+          );
+
+
+        if (!confirmed) {
+          return;
+        }
+
+
+        const status =
+          $('#friendAccessStatus');
+
+
+        clearClientAccessButton.disabled =
+          true;
+
+        clearClientAccessButton.textContent =
+          '正在清除……';
+
+
+        try {
+
+          await api(
+            '/api/access/revoke-self',
+            {
+              method:
+                'POST'
+            }
+          );
+
+
+          localStorage.removeItem(
+            storageKeys.accessToken
+          );
+
+
+          /*
+           * 重新打开设置，
+           * 马上恢复邀请码输入界面。
+           */
+          openSettings();
+
+        } catch (error) {
+
+          /*
+           * 如果后台返回 401，
+           * api() 已经自动删除了失效 Token。
+           *
+           * 这种情况直接重新显示邀请码入口即可。
+           */
+          if (!getClientAccessToken()) {
+
+            openSettings();
+
+            return;
+
+          }
+
+
+          status.textContent =
+            error?.message ||
+            '清除授权失败';
+
+
+          clearClientAccessButton.disabled =
+            false;
+
+          clearClientAccessButton.textContent =
+            '清除当前授权';
+
+        }
+
+      }
+    );
   /*
    * 本地 MP3 导入。
    */
