@@ -4401,13 +4401,18 @@ function classifyFavoriteFailure(
     ).toLowerCase();
 
 
+  /*
+   * 地区限制必须出现比较明确的表达，
+   * 不再因为单独出现 region / geo
+   * 就直接判断成地区限制。
+   */
   if (
-    /no longer available|video unavailable|video has been deleted|this video is unavailable|视频.*失效|视频.*不存在|稿件.*不存在|已删除|不可见/.test(
+    /not available in (?:your )?(?:country|region)|geo[- ]?restricted|geo restriction|regional restriction|region restriction|地区限制|区域限制|仅限.*地区|所在地区.*不可用/.test(
       text
     )
   ) {
 
-    return '视频失效';
+    return '地区限制';
 
   }
 
@@ -4423,13 +4428,16 @@ function classifyFavoriteFailure(
   }
 
 
+  /*
+   * 明确失效 / 删除 / 不存在。
+   */
   if (
-    /region|country|geo|地区|区域限制|not available in your country/.test(
+    /no longer available|video unavailable|video is unavailable|video is not available|video has been deleted|video does not exist|video not found|视频.*失效|视频.*不存在|稿件.*失效|稿件.*不存在|已删除|不可见/.test(
       text
     )
   ) {
 
-    return '地区限制';
+    return '视频失效';
 
   }
 
@@ -4580,7 +4588,7 @@ function favoriteFailureDisplayTitle(
 
 
   /*
-   * 不把 BV 号当成用户可读标题。
+   * 有正常标题时直接显示标题。
    */
   if (
     title &&
@@ -4592,6 +4600,21 @@ function favoriteFailureDisplayTitle(
   ) {
 
     return title;
+
+  }
+
+
+  /*
+   * 标题拿不到时，
+   * 把 BV 号作为辅助定位信息显示。
+   */
+  if (
+    /^BV[0-9A-Za-z]+$/i.test(
+      id
+    )
+  ) {
+
+    return `标题不可用（${id}）`;
 
   }
 
