@@ -63,6 +63,11 @@ const state = {
   playlistSaveJobs: new Map(),
   mobileDownloadResumeBusy: false,
   mobileDownloadCompleteTimer: null,
+  incomingSyncActive: false,
+
+  incomingSyncProgress: 0,
+
+  incomingSyncMessage: '',
   playerCoverUrl: null,
   playlistHeaderScrollHandler: null,
   activeObjectUrl: ''
@@ -1684,6 +1689,103 @@ async function retryMobileDownloadFailures(
 
   job.message =
     `正在重试失败项 · 0/${trackIds.length}`;
+  const originalFailureByTrackId =
+    new Map();
+
+
+  for (
+    const failure
+    of failures
+  ) {
+
+    if (
+      failure?.trackId &&
+      !originalFailureByTrackId.has(
+        failure.trackId
+      )
+    ) {
+
+      originalFailureByTrackId.set(
+        failure.trackId,
+        failure
+      );
+
+    }
+
+  }
+
+
+  const preserveRemainingRetryFailures =
+    (startIndex) => {
+
+      for (
+        let remainIndex =
+          startIndex;
+
+        remainIndex <
+        trackIds.length;
+
+        remainIndex += 1
+      ) {
+
+        const remainId =
+          trackIds[
+          remainIndex
+          ];
+
+
+        if (
+          job.failures.some(
+            (failure) =>
+              failure.trackId ===
+              remainId
+          )
+        ) {
+
+          continue;
+
+        }
+
+
+        const originalFailure =
+          originalFailureByTrackId.get(
+            remainId
+          );
+
+
+        const remainTrack =
+          state.library.tracks.find(
+            (item) =>
+              item.id ===
+              remainId
+          );
+
+
+        job.failures.push({
+
+          trackId:
+            remainId,
+
+          title:
+            originalFailure?.title ||
+            remainTrack?.title ||
+            '未知歌曲',
+
+          type:
+            originalFailure?.type ||
+            'audio'
+
+        });
+
+      }
+
+
+      storeMobileDownloadFailures(
+        playlistId,
+        job.failures
+      );
+
+    };
 
 
   addMobileDownloadJob(
@@ -1735,9 +1837,8 @@ async function retryMobileDownloadFailures(
         '已暂停';
 
 
-      storeMobileDownloadFailures(
-        playlistId,
-        job.failures
+      preserveRemainingRetryFailures(
+        index
       );
 
 
@@ -1805,57 +1906,13 @@ async function retryMobileDownloadFailures(
        * 当前这首和后面的失败项
        * 都继续保留。
        */
-      for (
-        let remainIndex = index;
-        remainIndex < trackIds.length;
-        remainIndex += 1
-      ) {
-
-        const remainId =
-          trackIds[remainIndex];
-
-        const remainTrack =
-          state.library.tracks.find(
-            (item) =>
-              item.id === remainId
-          );
-
-
-        if (
-          !job.failures.some(
-            (failure) =>
-              failure.trackId ===
-              remainId
-          )
-        ) {
-
-          job.failures.push({
-
-            trackId:
-              remainId,
-
-            title:
-              remainTrack?.title ||
-              '未知歌曲',
-
-            type:
-              'audio'
-
-          });
-
-        }
-
-      }
+      preserveRemainingRetryFailures(
+        index
+      );
 
 
       job.message =
         '等待连接 Mac 服务…';
-
-
-      storeMobileDownloadFailures(
-        playlistId,
-        job.failures
-      );
 
 
       refreshDownloadManagerUi();
@@ -1955,29 +2012,13 @@ async function retryMobileDownloadFailures(
           true;
 
 
-        job.failures.push({
-
-          trackId:
-            track.id,
-
-          title:
-            track.title ||
-            '未知歌曲',
-
-          type:
-            'audio'
-
-        });
+        preserveRemainingRetryFailures(
+          index
+        );
 
 
         job.message =
           '网络或 Mac 服务暂时不可用 · 等待重新连接…';
-
-
-        storeMobileDownloadFailures(
-          playlistId,
-          job.failures
-        );
 
 
         refreshDownloadManagerUi();
@@ -6581,10 +6622,71 @@ function buildDownloadManagerBody() {
   const history =
     getMobileDownloadHistory();
 
+  const syncProgress =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        state.incomingSyncProgress ||
+        0
+      )
+    );
+
+
+  const syncHtml =
+    state.incomingSyncActive
+      ? `
+      <section class="download-manager-section">
+
+        <h3 class="download-manager-section-title">
+          下载任务
+        </h3>
+
+        <div class="download-manager-list">
+
+          <div class="download-manager-item">
+
+            <div class="download-manager-heading">
+
+              <strong>
+                手机同步
+              </strong>
+
+              <span>
+                正在同步
+              </span>
+
+            </div>
+
+            <div class="download-manager-message">
+              ${escapeHtml(
+        state.incomingSyncMessage ||
+        '正在准备同步…'
+      )}
+            </div>
+
+            <progress
+              max="100"
+              value="${syncProgress}"
+            ></progress>
+
+            <div class="download-manager-percent">
+              ${syncProgress}%
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+    `
+      : '';
+
 
   if (
     !jobs.length &&
-    !history.length
+    !history.length &&
+    !state.incomingSyncActive
   ) {
 
     return `
@@ -6932,14 +7034,16 @@ function buildDownloadManagerBody() {
 
 
   return `
-    <div class="download-manager">
+  <div class="download-manager">
 
-      ${activeHtml}
+    ${syncHtml}
 
-      ${historyHtml}
+    ${activeHtml}
 
-    </div>
-  `;
+    ${historyHtml}
+
+  </div>
+`;
 
 }
 function showMobileDownloadCompleteFeedback() {
@@ -6960,34 +7064,6 @@ function showMobileDownloadCompleteFeedback() {
     window.clearTimeout(
       state.mobileDownloadCompleteTimer
     );
-
-  }
-
-
-  /*
-   * 先把圆环强制显示成 100%。
-   */
-  if (
-    els.mobileDownloadsProgress &&
-    els.mobileDownloadsProgressBar
-  ) {
-
-    const circumference =
-      2 * Math.PI * 17;
-
-
-    els.mobileDownloadsProgress.hidden =
-      false;
-
-
-    els.mobileDownloadsProgressBar.style
-      .strokeDasharray =
-      `${circumference}`;
-
-
-    els.mobileDownloadsProgressBar.style
-      .strokeDashoffset =
-      '0';
 
   }
 
@@ -7025,16 +7101,6 @@ function showMobileDownloadCompleteFeedback() {
 }
 function refreshDownloadManagerUi() {
 
-  const jobs =
-    Array.from(
-      state.playlistSaveJobs.values()
-    );
-
-
-  const activeCount =
-    getMobileDownloadQueue()
-      .length;
-
   const activeJobs =
     Array.from(
       state.playlistSaveJobs.entries()
@@ -7052,40 +7118,74 @@ function refreshDownloadManagerUi() {
       );
 
 
+  const progressValues =
+    activeJobs.map(
+      (job) => {
+
+        const progress =
+          Number.isFinite(
+            job.progress
+          )
+            ? job.progress
+            : 0;
+
+
+        return Math.max(
+          0,
+          Math.min(
+            100,
+            progress
+          )
+        );
+
+      }
+    );
+
+
+  if (
+    state.incomingSyncActive
+  ) {
+
+    progressValues.push(
+      Math.max(
+        0,
+        Math.min(
+          100,
+          state.incomingSyncProgress ||
+          0
+        )
+      )
+    );
+
+  }
+
+
   const overallProgress =
-    activeJobs.length
+    progressValues.length
       ? Math.round(
-        activeJobs.reduce(
-          (sum, job) => {
-
-            const progress =
-              Number.isFinite(
-                job.progress
-              )
-                ? job.progress
-                : 0;
-
-
-            return (
-              sum +
-              Math.max(
-                0,
-                Math.min(
-                  100,
-                  progress
-                )
-              )
-            );
-
-          },
+        progressValues.reduce(
+          (sum, value) =>
+            sum + value,
           0
         ) /
-        activeJobs.length
+        progressValues.length
       )
       : 0;
 
 
-  if (els.mobileDownloadsBadge) {
+  const activeCount =
+    getMobileDownloadQueue()
+      .length +
+    (
+      state.incomingSyncActive
+        ? 1
+        : 0
+    );
+
+
+  if (
+    els.mobileDownloadsBadge
+  ) {
 
     els.mobileDownloadsBadge.hidden =
       activeCount === 0;
@@ -7097,14 +7197,13 @@ function refreshDownloadManagerUi() {
   }
 
 
-  /* 放这里 */
   if (
     els.mobileDownloadsProgress &&
     els.mobileDownloadsProgressBar
   ) {
 
     els.mobileDownloadsProgress.hidden =
-      activeJobs.length === 0;
+      progressValues.length === 0;
 
 
     const circumference =
@@ -7121,6 +7220,7 @@ function refreshDownloadManagerUi() {
       `${circumference *
       (1 - overallProgress / 100)
       }`;
+
   }
 
 
@@ -7134,6 +7234,7 @@ function refreshDownloadManagerUi() {
 
     els.modalBody.innerHTML =
       buildDownloadManagerBody();
+
     bindDownloadManagerActions();
 
   }
@@ -7374,7 +7475,15 @@ function openDownloadManager() {
 
 }
 
-function openModal({ title, body, primaryText = '保存', onPrimary }) {
+function openModal({
+  title,
+  body,
+  primaryText = '保存',
+  onPrimary,
+  cancelText = '取消',
+  showCancel = true,
+  context = ''
+}) {
 
   /*
    * 每次打开普通弹窗时，
@@ -7388,6 +7497,24 @@ function openModal({ title, body, primaryText = '保存', onPrimary }) {
   els.modalTitle.textContent = title;
   els.modalBody.innerHTML = body;
   els.modalPrimaryButton.textContent = primaryText;
+  els.modal.dataset.context =
+    context;
+
+
+  els.modalCancelButton.hidden =
+    !showCancel;
+
+
+  els.modalCancelButton.textContent =
+    cancelText;
+
+
+  els.modalPrimaryButton.hidden =
+    false;
+
+
+  els.modalPrimaryButton.disabled =
+    false;
   els.modal.classList.remove('hidden');
   const primaryHandler =
     async () => {
@@ -7469,6 +7596,11 @@ function closeModal() {
   els.modal.classList.add(
     'hidden'
   );
+
+
+  els.modal.dataset.context =
+    '';
+
 
   els.modalPrimaryButton.onclick =
     null;
@@ -8938,8 +9070,15 @@ async function openPhoneQrScanner() {
 
 
   openModal({
+
     title:
       '扫描电脑二维码',
+
+    context:
+      'qr-scanner',
+
+    showCancel:
+      false,
 
     primaryText:
       '取消',
@@ -9470,11 +9609,6 @@ async function downloadIncomingSyncSnapshot(
     const showIncomingSyncStage =
       (stage) => {
 
-        if (!els.modalBody) {
-          return;
-        }
-
-
         const percent =
           tracks.length
             ? Math.round(
@@ -9484,6 +9618,41 @@ async function downloadIncomingSyncSnapshot(
               ) * 100
             )
             : 100;
+
+
+        state.incomingSyncProgress =
+          Math.min(
+            100,
+            50 +
+            Math.round(
+              percent / 2
+            )
+          );
+
+
+        state.incomingSyncMessage =
+          `${stage} · ` +
+          (
+            track.title ||
+            '未命名歌曲'
+          );
+
+
+        refreshDownloadManagerUi();
+
+
+        if (
+          !els.modalBody ||
+          els.modal.classList.contains(
+            'hidden'
+          ) ||
+          els.modal.dataset.context !==
+          'incoming-sync'
+        ) {
+
+          return;
+
+        }
 
 
         els.modalBody.innerHTML = `
@@ -10156,7 +10325,15 @@ async function waitIncomingSyncPreparation(
 
     let preparationDetail =
       '请保持这个页面打开。';
-
+    let preparationProgress =
+      Math.max(
+        5,
+        Math.min(
+          50,
+          state.incomingSyncProgress ||
+          0
+        )
+      );
 
     if (
       preparation?.status ===
@@ -10194,6 +10371,17 @@ async function waitIncomingSyncPreparation(
               : ''
           )
           : '正在下载……';
+      preparationProgress =
+        total
+          ? Math.round(
+            completed /
+            total *
+            50
+          )
+          : Math.max(
+            preparationProgress,
+            5
+          );
 
     } else if (
       session.status ===
@@ -10231,11 +10419,32 @@ async function waitIncomingSyncPreparation(
       preparationDetail =
         '即将保存到手机……';
 
+      preparationProgress =
+        50;
     }
+    state.incomingSyncProgress =
+      preparationProgress;
+
+
+    state.incomingSyncMessage =
+      preparationMessage +
+      (
+        preparationDetail
+          ? ` · ${preparationDetail}`
+          : ''
+      );
+
+
+    refreshDownloadManagerUi();
 
 
     if (
-      els.modalBody
+      els.modalBody &&
+      !els.modal.classList.contains(
+        'hidden'
+      ) &&
+      els.modal.dataset.context ===
+      'incoming-sync'
     ) {
 
       els.modalBody.innerHTML = `
@@ -10404,13 +10613,6 @@ async function openIncomingSyncPreview() {
       );
 
 
-    const missingReport =
-      await reportIncomingSyncMissing(
-        invite,
-        missing
-      );
-
-
     const existingAudioCount =
       tracks.length -
       missing.audioTrackIds.length;
@@ -10435,8 +10637,14 @@ async function openIncomingSyncPreview() {
       title:
         '发现手机同步',
 
+      context:
+        'incoming-sync',
+
       primaryText:
-        '开始更新',
+        '开始同步',
+
+      cancelText:
+        '取消',
 
       body: `
         <p class="settings-note">
@@ -10497,8 +10705,44 @@ async function openIncomingSyncPreview() {
           els.modalPrimaryButton.disabled =
             true;
 
+          state.incomingSyncActive =
+            true;
+
+          state.incomingSyncProgress =
+            0;
+
+          state.incomingSyncMessage =
+            '正在准备需要同步的歌曲……';
+
+
+          refreshDownloadManagerUi();
+
+
+          els.modalTitle.textContent =
+            '手机同步';
+
+
+          els.modalPrimaryButton.textContent =
+            '同步进行中…';
+
+
+          els.modalPrimaryButton.disabled =
+            true;
+
+
+          els.modalCancelButton.hidden =
+            false;
+
+
+          els.modalCancelButton.textContent =
+            '后台运行';
 
           try {
+            const missingReport =
+              await reportIncomingSyncMissing(
+                invite,
+                missing
+              );
 
             await waitIncomingSyncPreparation(
               invite,
@@ -10510,6 +10754,16 @@ async function openIncomingSyncPreview() {
                 manifest
               );
 
+            state.incomingSyncProgress =
+              100;
+
+            state.incomingSyncMessage =
+              '同步完成';
+
+
+            refreshDownloadManagerUi();
+
+            showMobileDownloadCompleteFeedback();
 
             openModal({
 
@@ -10575,8 +10829,28 @@ async function openIncomingSyncPreview() {
 
           } finally {
 
-            els.modalPrimaryButton.disabled =
+            state.incomingSyncActive =
               false;
+
+            state.incomingSyncProgress =
+              0;
+
+            state.incomingSyncMessage =
+              '';
+
+
+            refreshDownloadManagerUi();
+
+
+            if (
+              els.modal.dataset.context ===
+              'incoming-sync'
+            ) {
+
+              els.modalPrimaryButton.disabled =
+                false;
+
+            }
 
           }
 

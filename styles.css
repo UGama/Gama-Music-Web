@@ -160,6 +160,9 @@ p {
 
 .mobile-download-button {
   display: none;
+
+  position: relative;
+  overflow: visible;
 }
 
 
@@ -2559,16 +2562,19 @@ input[type="range"] {
     10px;
 }
 
-.mobile-download-ring {
+.mobile-download-button .mobile-download-ring {
   position: absolute;
-  inset: -3px;
 
-  width: calc(100% + 6px);
-  height: calc(100% + 6px);
+  top: 50%;
+  left: 50%;
+
+  width: 50px;
+  height: 50px;
 
   pointer-events: none;
 
   transform:
+    translate(-50%, -50%)
     rotate(-90deg);
 }
 
