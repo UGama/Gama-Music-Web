@@ -10,7 +10,8 @@ const storageKeys = {
   selectedPlaylist: 'gamaMusic.selectedPlaylist',
   trackSort: 'gamaMusic.trackSort',
   sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt',
-  syncClientId: 'gamaMusic.syncClientId'
+  syncClientId: 'gamaMusic.syncClientId',
+  downloadJobId: 'gamaMusic.downloadJobId'
 };
 
 const offlineDb = {
@@ -2275,8 +2276,35 @@ async function startDownload(event) {
   setStatus('已加入下载队列。', 'info', 1);
 
   try {
-    const result = await api('/api/download', { method: 'POST', body: { url, title } });
-    pollJob(result.job.id);
+    const result =
+      await api(
+        '/api/download',
+        {
+          method: 'POST',
+          body: {
+            url,
+            title
+          }
+        }
+      );
+
+
+    if (!result?.job?.id) {
+      throw new Error(
+        '后台没有返回下载任务 ID。'
+      );
+    }
+
+
+    localStorage.setItem(
+      storageKeys.downloadJobId,
+      result.job.id
+    );
+
+
+    pollJob(
+      result.job.id
+    );
   } catch (error) {
     setStatus(error.message, 'warning');
     els.downloadButton.disabled = false;
@@ -2600,12 +2628,58 @@ function pollJob(jobId) {
           );
 
         }
+        /*
+ * 到这里说明：
+ * - 下载失败，或者
+ * - 完成内容已经保存进 Web，或者
+ * - duplicate 已经处理完成。
+ *
+ * 不再需要刷新后恢复这个任务。
+ */
+        localStorage.removeItem(
+          storageKeys.downloadJobId
+        );
       }
     } catch (error) {
-      window.clearInterval(state.jobTimer);
-      setStatus(error.message, 'warning');
-      els.downloadButton.disabled = false;
-      els.previewButton.disabled = false;
+
+      window.clearInterval(
+        state.jobTimer
+      );
+
+
+      /*
+       * Desktop 如果已经重启，
+       * 内存里的 job 会消失。
+       *
+       * 这种旧 job ID 不要永远留在浏览器。
+       */
+      if (
+        String(
+          error?.message || ''
+        ).includes(
+          '没有找到这个下载任务'
+        )
+      ) {
+
+        localStorage.removeItem(
+          storageKeys.downloadJobId
+        );
+
+      }
+
+
+      setStatus(
+        error.message,
+        'warning'
+      );
+
+
+      els.downloadButton.disabled =
+        false;
+
+      els.previewButton.disabled =
+        false;
+
     }
   }, 1200);
 }
@@ -2984,6 +3058,142 @@ async function saveFavoriteTracksToWeb(
 
 }
 
+function classifyFavoriteFailure(
+  error
+) {
+
+  const text =
+    String(
+      error || ''
+    ).toLowerCase();
+
+
+  if (
+    /no longer available|video unavailable|video has been deleted|this video is unavailable|视频.*失效|视频.*不存在|稿件.*不存在|已删除|不可见/.test(
+      text
+    )
+  ) {
+
+    return '视频失效';
+
+  }
+
+
+  if (
+    /private|permission|login|required login|sign in|cookie|cookies|私密|权限|需要登录|登录后/.test(
+      text
+    )
+  ) {
+
+    return '权限/登录限制';
+
+  }
+
+
+  if (
+    /region|country|geo|地区|区域限制|not available in your country/.test(
+      text
+    )
+  ) {
+
+    return '地区限制';
+
+  }
+
+
+  if (
+    /429|412|too many requests|rate limit|precondition failed|请求过于频繁|风控/.test(
+      text
+    )
+  ) {
+
+    return 'B站请求受限';
+
+  }
+
+
+  if (
+    /403|forbidden|access denied/.test(
+      text
+    )
+  ) {
+
+    return '访问被拒绝';
+
+  }
+
+
+  if (
+    /unsupported url|invalid url|url 无效|链接无效/.test(
+      text
+    )
+  ) {
+
+    return '链接无效';
+
+  }
+
+
+  if (
+    /timeout|timed out|超时/.test(
+      text
+    )
+  ) {
+
+    return '下载超时';
+
+  }
+
+
+  return '其他错误';
+
+}
+
+
+function summarizeFavoriteFailures(
+  failures
+) {
+
+  const counts =
+    new Map();
+
+
+  for (
+    const failure
+    of (
+      Array.isArray(failures)
+        ? failures
+        : []
+    )
+  ) {
+
+    const category =
+      classifyFavoriteFailure(
+        failure?.error
+      );
+
+
+    counts.set(
+      category,
+      (
+        counts.get(category) ||
+        0
+      ) + 1
+    );
+
+  }
+
+
+  return Array.from(
+    counts.entries()
+  )
+    .map(
+      ([category, count]) =>
+        `${category} ${count} 首`
+    )
+    .join(' · ');
+
+}
 
 function pollFavoriteJob(jobId) {
   window.clearInterval(state.favoriteJobTimer);
@@ -3206,6 +3416,10 @@ function pollFavoriteJob(jobId) {
 
         }
 
+        const failureSummary =
+          summarizeFavoriteFailures(
+            job.failures
+          );
 
         if (job.status === 'complete') {
           setFavoriteStatus(
@@ -3219,7 +3433,14 @@ function pollFavoriteJob(jobId) {
             ) +
             (
               job.failed
-                ? ` · B站下载失败 ${job.failed} 首`
+                ? (
+                    ` · B站下载失败 ${job.failed} 首` +
+                    (
+                      failureSummary
+                        ? `（${failureSummary}）`
+                        : ''
+                    )
+                  )
                 : ''
             ),
             (
@@ -10146,6 +10367,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshOfflineState();
   await loadLibrary();
 
+  /*
+ * 如果网页在 Bilibili 下载期间刷新，
+ * 恢复之前后台已经创建的任务。
+ */
+  const downloadJobId =
+    String(
+      localStorage.getItem(
+        storageKeys.downloadJobId
+      ) || ''
+    ).trim();
+
+
+  if (downloadJobId) {
+
+    els.downloadButton.disabled =
+      true;
+
+    els.previewButton.disabled =
+      true;
+
+
+    setStatus(
+      '正在恢复未完成的 Bilibili 导入任务……',
+      'info',
+      1
+    );
+
+
+    pollJob(
+      downloadJobId
+    );
+
+  }
 
   /*
    * 如果 URL 里带有手机同步邀请，
