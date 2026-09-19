@@ -12,7 +12,10 @@ const storageKeys = {
   sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt',
   syncClientId: 'gamaMusic.syncClientId',
   downloadJobId: 'gamaMusic.downloadJobId',
-  favoriteJobId: 'gamaMusic.favoriteJobId'
+  favoriteJobId: 'gamaMusic.favoriteJobId',
+  mobileDownloadQueue: 'gamaMusic.mobileDownloadQueue',
+  mobileDownloadPaused: 'gamaMusic.mobileDownloadPaused',
+  mobileDownloadHistory: 'gamaMusic.mobileDownloadHistory'
 };
 
 const offlineDb = {
@@ -57,6 +60,8 @@ const state = {
   offlineCoverUrls: new Map(),
   offlineUsage: 0,
   playlistSaveJobs: new Map(),
+  mobileDownloadResumeBusy: false,
+  mobileDownloadCompleteTimer: null,
   playerCoverUrl: null,
   playlistHeaderScrollHandler: null,
   activeObjectUrl: ''
@@ -177,6 +182,16 @@ function initElements() {
     libraryView: $('#libraryView'),
     playlistsView: $('#playlistsView'),
     contentSurface: $('.content-surface'),
+    mobileDownloadsButton:
+      $('#mobileDownloadsButton'),
+
+    mobileDownloadsBadge:
+      $('#mobileDownloadsBadge'),
+    mobileDownloadsProgress:
+      $('#mobileDownloadsProgress'),
+
+    mobileDownloadsProgressBar:
+      $('#mobileDownloadsProgressBar'),
     settingsButton: $('#settingsButton'),
     player: $('.player'),
     playerArt: $('.player-art'),
@@ -206,6 +221,12 @@ function applyMobilePlayerMode() {
   }
 
 
+  if (els.mobileDownloadsButton) {
+
+    els.mobileDownloadsButton.hidden =
+      false;
+
+  }
   /*
    * 手机 PWA 只负责播放和同步。
    *
@@ -922,9 +943,40 @@ function clearStatus() {
 }
 
 // Each playlist owns a persistent row; progress updates never replace other rows.
-function updatePlaylistSaveStatus(playlistId, message, type = 'info', progress = null) {
-  const job = state.playlistSaveJobs.get(playlistId);
-  if (!job || !els.playlistSaveStatus) return;
+function updatePlaylistSaveStatus(
+  playlistId,
+  message,
+  type = 'info',
+  progress = null
+) {
+
+  const job =
+    state.playlistSaveJobs.get(
+      playlistId
+    );
+
+
+  if (!job) {
+    return;
+  }
+
+
+  job.message =
+    message;
+
+  job.type =
+    type;
+
+  job.progress =
+    progress;
+
+
+  refreshDownloadManagerUi();
+
+
+  if (!els.playlistSaveStatus) {
+    return;
+  }
   if (!job.element) {
     job.element = document.createElement('div');
     job.element.className = 'status-card playlist-save-status';
@@ -959,6 +1011,305 @@ function playlistSaveButtonState(playlist) {
     return { disabled: true, label: '已全部保存' };
   }
   return { disabled: false, label: '↓ 保存全部' };
+}
+
+function getMobileDownloadHistory() {
+
+  try {
+
+    const value =
+      JSON.parse(
+        localStorage.getItem(
+          storageKeys.mobileDownloadHistory
+        ) || '[]'
+      );
+
+
+    return Array.isArray(value)
+      ? value
+      : [];
+
+  } catch {
+
+    return [];
+
+  }
+
+}
+
+
+function saveMobileDownloadHistory(
+  history
+) {
+
+  localStorage.setItem(
+    storageKeys.mobileDownloadHistory,
+    JSON.stringify(
+      history.slice(0, 30)
+    )
+  );
+
+}
+function clearMobileDownloadHistory() {
+
+  localStorage.removeItem(
+    storageKeys.mobileDownloadHistory
+  );
+
+
+  refreshDownloadManagerUi();
+
+}
+
+
+function addMobileDownloadHistory({
+  playlistId,
+  name,
+  status,
+  message
+}) {
+
+  const history =
+    getMobileDownloadHistory();
+
+
+  history.unshift({
+    id:
+      `${playlistId}-${Date.now()}`,
+
+    playlistId,
+
+    name:
+      name || '播放列表',
+
+    status,
+
+    message:
+      message || '',
+
+    finishedAt:
+      new Date()
+        .toISOString()
+  });
+
+
+  saveMobileDownloadHistory(
+    history
+  );
+
+}
+
+function getMobileDownloadQueue() {
+
+  try {
+
+    const value =
+      JSON.parse(
+        localStorage.getItem(
+          storageKeys.mobileDownloadQueue
+        ) || '[]'
+      );
+
+
+    return Array.isArray(value)
+      ? value.filter(Boolean)
+      : [];
+
+  } catch {
+
+    return [];
+
+  }
+
+}
+
+
+function saveMobileDownloadQueue(
+  queue
+) {
+
+  localStorage.setItem(
+    storageKeys.mobileDownloadQueue,
+    JSON.stringify(
+      Array.from(
+        new Set(queue)
+      )
+    )
+  );
+
+}
+
+
+function addMobileDownloadJob(
+  playlistId
+) {
+
+  const queue =
+    getMobileDownloadQueue();
+
+
+  if (
+    !queue.includes(
+      playlistId
+    )
+  ) {
+
+    queue.push(
+      playlistId
+    );
+
+    saveMobileDownloadQueue(
+      queue
+    );
+
+  }
+
+}
+
+
+function removeMobileDownloadJob(
+  playlistId
+) {
+
+  saveMobileDownloadQueue(
+    getMobileDownloadQueue()
+      .filter(
+        (id) =>
+          id !== playlistId
+      )
+  );
+
+}
+
+function getPausedMobileDownloads() {
+
+  try {
+
+    const value =
+      JSON.parse(
+        localStorage.getItem(
+          storageKeys.mobileDownloadPaused
+        ) || '[]'
+      );
+
+
+    return new Set(
+      Array.isArray(value)
+        ? value
+        : []
+    );
+
+  } catch {
+
+    return new Set();
+
+  }
+
+}
+
+
+function isMobileDownloadPaused(
+  playlistId
+) {
+
+  return getPausedMobileDownloads()
+    .has(
+      playlistId
+    );
+
+}
+
+
+function setMobileDownloadPaused(
+  playlistId,
+  paused
+) {
+
+  const items =
+    getPausedMobileDownloads();
+
+
+  if (paused) {
+
+    items.add(
+      playlistId
+    );
+
+  } else {
+
+    items.delete(
+      playlistId
+    );
+
+  }
+
+
+  localStorage.setItem(
+    storageKeys.mobileDownloadPaused,
+    JSON.stringify(
+      Array.from(items)
+    )
+  );
+
+}
+
+function cancelMobileDownload(
+  playlistId
+) {
+
+  removeMobileDownloadJob(
+    playlistId
+  );
+
+
+  setMobileDownloadPaused(
+    playlistId,
+    false
+  );
+
+
+  const job =
+    state.playlistSaveJobs.get(
+      playlistId
+    );
+
+
+  if (job) {
+
+    job.cancelled =
+      true;
+
+    job.active =
+      false;
+
+    job.message =
+      '已取消';
+
+    job.progress =
+      job.progress ?? 0;
+
+  }
+  if (job) {
+
+    addMobileDownloadHistory({
+
+      playlistId,
+
+      name:
+        job.name,
+
+      status:
+        'cancelled',
+
+      message:
+        '下载已取消，已完成的歌曲仍保留在手机中'
+
+    });
+
+  }
+
+  refreshDownloadManagerUi();
+
 }
 
 function syncPlaylistSaveButtons() {
@@ -1360,7 +1711,30 @@ function startServerConnectionMonitor() {
    */
   window.addEventListener(
     'online',
-    checkServerConnection
+    async () => {
+
+      await checkServerConnection();
+
+
+      if (
+        isMobilePlayerMode()
+      ) {
+
+        resumeMobileDownloads()
+          .catch(
+            (error) => {
+
+              console.warn(
+                '网络恢复后继续下载失败：',
+                error
+              );
+
+            }
+          );
+
+      }
+
+    }
   );
 
 
@@ -1387,9 +1761,33 @@ function startServerConnectionMonitor() {
 
 
       /*
-       * Desktop 只检查是否在线。
+       * 回到前台以后重新检查 Mac Server。
        */
       await checkServerConnection();
+
+
+      /*
+       * 如果 iOS 在后台暂停了下载，
+       * 回到 Gama Music 时自动继续
+       * 尚未完成的手机下载任务。
+       */
+      if (
+        isMobilePlayerMode()
+      ) {
+
+        resumeMobileDownloads()
+          .catch(
+            (error) => {
+
+              console.warn(
+                '继续手机下载任务失败：',
+                error
+              );
+
+            }
+          );
+
+      }
 
     }
   );
@@ -4287,13 +4685,18 @@ async function saveTrackToIphone(
     );
 
   } finally {
-    button.disabled = false;
+    if (button) {
+
+      button.disabled =
+        false;
+
+    }
   }
 }
 
 async function savePlaylistToIphone(
   playlistId,
-  button
+  button = null
 ) {
   const playlist =
     state.library.playlists.find(
@@ -4301,7 +4704,26 @@ async function savePlaylistToIphone(
         item.id === playlistId
     );
 
-  if (!playlist || playlistSaveButtonState(playlist).disabled) return;
+  if (!playlist) {
+
+    removeMobileDownloadJob(
+      playlistId
+    );
+
+    return;
+
+  }
+
+
+  if (
+    playlistSaveButtonState(
+      playlist
+    ).disabled
+  ) {
+
+    return;
+
+  }
 
 
   const tracks =
@@ -4325,7 +4747,9 @@ async function savePlaylistToIphone(
   }
 
 
-  const previousJob = state.playlistSaveJobs.get(playlistId);
+  addMobileDownloadJob(
+    playlistId
+  );
   const job = { name: playlist.name, active: true, element: previousJob?.element || null };
   state.playlistSaveJobs.set(playlistId, job);
   const report = (message, type = 'info', progress = null) =>
@@ -4333,13 +4757,19 @@ async function savePlaylistToIphone(
   if (job.element) job.element.querySelector('strong').textContent = `保存到本地 · ${job.name}`;
   report('准备保存…', 'info', 0);
   syncPlaylistSaveButtons();
-  button.disabled = true;
+  if (button) {
+
+    button.disabled =
+      true;
+
+  }
 
   let audioSavedCount = 0;
   let coverSavedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
-
+  let completedSuccessfully =
+    false;
 
   try {
     if (navigator.storage?.persist) {
@@ -4354,6 +4784,37 @@ async function savePlaylistToIphone(
       index < tracks.length;
       index += 1
     ) {
+      if (
+        job.cancelled
+      ) {
+
+        break;
+
+      } if (
+        job.cancelled
+      ) {
+
+        break;
+
+      }
+      if (
+        isMobileDownloadPaused(
+          playlistId
+        )
+      ) {
+
+        job.active =
+          false;
+
+        report(
+          `“${playlist.name}”已暂停`,
+          'info',
+          job.progress ?? 0
+        );
+
+        break;
+
+      }
       const track =
         tracks[index];
 
@@ -4557,6 +5018,54 @@ async function savePlaylistToIphone(
         : 'info',
       100
     );
+    if (
+      !failedCount &&
+      !job.cancelled
+    ) {
+
+      removeMobileDownloadJob(
+        playlistId
+      );
+
+
+      addMobileDownloadHistory({
+
+        playlistId,
+
+        name:
+          playlist.name,
+
+        status:
+          'complete',
+
+        message:
+          `${tracks.length} 首歌曲已保存到手机`
+
+      });
+      completedSuccessfully =
+        true;
+
+    } else if (
+      failedCount &&
+      !job.cancelled
+    ) {
+
+      addMobileDownloadHistory({
+
+        playlistId,
+
+        name:
+          playlist.name,
+
+        status:
+          'warning',
+
+        message:
+          `下载完成，但有 ${failedCount} 项失败`
+
+      });
+
+    }
 
   } catch (error) {
     const message =
@@ -4571,11 +5080,111 @@ async function savePlaylistToIphone(
     );
 
   } finally {
-    job.active = false;
-    if (job.element) job.element.querySelector('button').hidden = false;
-    button.disabled = false;
+
+    job.active =
+      false;
+
+
+    if (job.element) {
+
+      job.element
+        .querySelector('button')
+        .hidden =
+        false;
+
+    }
+
+
+    button.disabled =
+      false;
+
+
     syncPlaylistSaveButtons();
+
+    refreshDownloadManagerUi();
+
   }
+}
+
+async function resumeMobileDownloads() {
+
+  if (
+    !isMobilePlayerMode() ||
+    state.mobileDownloadResumeBusy
+  ) {
+
+    return;
+
+  }
+
+
+  const queue =
+    getMobileDownloadQueue();
+
+
+  if (!queue.length) {
+
+    refreshDownloadManagerUi();
+
+    return;
+
+  }
+
+
+  state.mobileDownloadResumeBusy =
+    true;
+
+
+  try {
+
+    for (
+      const playlistId
+      of queue
+    ) {
+
+      if (
+        isMobileDownloadPaused(
+          playlistId
+        )
+      ) {
+
+        continue;
+
+      }
+      const playlist =
+        state.library.playlists.find(
+          (item) =>
+            item.id === playlistId
+        );
+
+
+      if (!playlist) {
+
+        removeMobileDownloadJob(
+          playlistId
+        );
+
+        continue;
+
+      }
+
+
+      await savePlaylistToIphone(
+        playlistId
+      );
+
+    }
+
+  } finally {
+
+    state.mobileDownloadResumeBusy =
+      false;
+
+
+    refreshDownloadManagerUi();
+
+  }
+
 }
 
 async function removeTrackFromIphone(trackId) {
@@ -4890,6 +5499,670 @@ function setMode(mode) {
   state.mode = mode;
   localStorage.setItem(storageKeys.mode, mode);
   renderModeButtons();
+}
+
+function buildDownloadManagerBody() {
+
+  const jobs =
+    Array.from(
+      state.playlistSaveJobs.entries()
+    )
+      .filter(
+        ([playlistId, job]) =>
+          job.active ||
+          isMobileDownloadPaused(
+            playlistId
+          )
+      );
+
+
+  const history =
+    getMobileDownloadHistory();
+
+
+  if (
+    !jobs.length &&
+    !history.length
+  ) {
+
+    return `
+      <div class="download-manager">
+
+        <div class="empty-state">
+          暂无下载任务
+        </div>
+
+      </div>
+    `;
+
+  }
+
+
+  const activeHtml =
+    jobs.length
+      ? `
+        <section class="download-manager-section">
+
+          <h3 class="download-manager-section-title">
+            正在下载
+          </h3>
+
+          <div class="download-manager-list">
+
+            ${jobs
+        .map(
+          ([playlistId, job]) => {
+
+            const progress =
+              Number.isFinite(
+                job.progress
+              )
+                ? Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    job.progress
+                  )
+                )
+                : 0;
+
+
+            const paused =
+              isMobileDownloadPaused(
+                playlistId
+              );
+
+
+            const stateText =
+              paused
+                ? '已暂停'
+                : '正在下载';
+
+
+            return `
+                    <div class="download-manager-item">
+
+                      <div class="download-manager-heading">
+
+                        <strong>
+                          ${escapeHtml(
+              job.name ||
+              '播放列表'
+            )}
+                        </strong>
+
+                        <span>
+                          ${escapeHtml(
+              stateText
+            )}
+                        </span>
+
+                      </div>
+
+
+                      <div class="download-manager-message">
+
+                        ${escapeHtml(
+              job.message ||
+              '准备下载…'
+            )}
+
+                      </div>
+
+
+                      <progress
+                        max="100"
+                        value="${progress}"
+                      ></progress>
+
+
+                      <div class="download-manager-percent">
+                        ${progress}%
+                      </div>
+
+
+                      <div class="download-manager-actions">
+
+                        <button
+                          class="secondary-button compact"
+                          type="button"
+                          data-download-playlist-id="${escapeHtml(
+              playlistId
+            )}"
+                        >
+                          ${paused
+                ? '继续'
+                : '暂停'
+              }
+                        </button>
+
+
+                        <button
+                          class="secondary-button compact"
+                          type="button"
+                          data-cancel-download-playlist-id="${escapeHtml(
+                playlistId
+              )}"
+                        >
+                          取消
+                        </button>
+
+                      </div>
+
+                    </div>
+                  `;
+
+          }
+        )
+        .join('')}
+
+          </div>
+
+        </section>
+      `
+      : '';
+
+
+  const historyHtml =
+    history.length
+      ? `
+        <section class="download-manager-section">
+
+          <div class="download-manager-history-heading">
+
+            <h3 class="download-manager-section-title">
+              最近下载
+            </h3>
+
+            <button
+              class="download-history-clear"
+              id="clearDownloadHistoryButton"
+              type="button"
+            >
+              清除记录
+            </button>
+
+          </div>
+
+
+          <div class="download-history-list">
+
+            ${history
+        .map(
+          (item) => {
+
+            const statusText =
+              item.status ===
+                'complete'
+                ? '✓ 已完成'
+                : (
+                  item.status ===
+                    'cancelled'
+                    ? '已取消'
+                    : '部分失败'
+                );
+
+
+            const time =
+              item.finishedAt
+                ? new Date(
+                  item.finishedAt
+                )
+                  .toLocaleString(
+                    'zh-CN',
+                    {
+                      month:
+                        'numeric',
+
+                      day:
+                        'numeric',
+
+                      hour:
+                        '2-digit',
+
+                      minute:
+                        '2-digit'
+                    }
+                  )
+                : '';
+
+
+            return `
+                    <div class="download-history-item">
+
+                      <div class="download-manager-heading">
+
+                        <strong>
+                          ${escapeHtml(
+              item.name ||
+              '播放列表'
+            )}
+                        </strong>
+
+                        <span>
+                          ${escapeHtml(
+              statusText
+            )}
+                        </span>
+
+                      </div>
+
+
+                      ${item.message
+                ? `
+                            <div class="download-manager-message">
+                              ${escapeHtml(
+                  item.message
+                )}
+                            </div>
+                          `
+                : ''
+              }
+
+
+                      ${time
+                ? `
+                            <div class="download-history-time">
+                              ${escapeHtml(
+                  time
+                )}
+                            </div>
+                          `
+                : ''
+              }
+
+                    </div>
+                  `;
+
+          }
+        )
+        .join('')}
+
+          </div>
+
+        </section>
+      `
+      : '';
+
+
+  return `
+    <div class="download-manager">
+
+      ${activeHtml}
+
+      ${historyHtml}
+
+    </div>
+  `;
+
+}
+function showMobileDownloadCompleteFeedback() {
+
+  if (
+    !els.mobileDownloadsButton
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    state.mobileDownloadCompleteTimer
+  ) {
+
+    window.clearTimeout(
+      state.mobileDownloadCompleteTimer
+    );
+
+  }
+
+
+  /*
+   * 先把圆环强制显示成 100%。
+   */
+  if (
+    els.mobileDownloadsProgress &&
+    els.mobileDownloadsProgressBar
+  ) {
+
+    const circumference =
+      2 * Math.PI * 17;
+
+
+    els.mobileDownloadsProgress.hidden =
+      false;
+
+
+    els.mobileDownloadsProgressBar.style
+      .strokeDasharray =
+      `${circumference}`;
+
+
+    els.mobileDownloadsProgressBar.style
+      .strokeDashoffset =
+      '0';
+
+  }
+
+
+  els.mobileDownloadsButton.classList.add(
+    'download-complete'
+  );
+
+
+  state.mobileDownloadCompleteTimer =
+    window.setTimeout(
+      () => {
+
+        els.mobileDownloadsButton
+          ?.classList.remove(
+            'download-complete'
+          );
+
+
+        state.mobileDownloadCompleteTimer =
+          null;
+
+
+        /*
+         * 恢复真实下载状态。
+         * 如果还有别的任务，
+         * 会继续显示它们的进度。
+         */
+        refreshDownloadManagerUi();
+
+      },
+      1000
+    );
+
+}
+function refreshDownloadManagerUi() {
+
+  const jobs =
+    Array.from(
+      state.playlistSaveJobs.values()
+    );
+
+
+  const activeCount =
+    jobs.filter(
+      (job) =>
+        job.active
+    ).length;
+
+  const activeJobs =
+    jobs.filter(
+      (job) =>
+        job.active &&
+        !isMobileDownloadPaused(
+          job.playlistId
+        )
+    );
+
+
+  const overallProgress =
+    activeJobs.length
+      ? Math.round(
+        activeJobs.reduce(
+          (sum, job) => {
+
+            const progress =
+              Number.isFinite(
+                job.progress
+              )
+                ? job.progress
+                : 0;
+
+
+            return (
+              sum +
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  progress
+                )
+              )
+            );
+
+          },
+          0
+        ) /
+        activeJobs.length
+      )
+      : 0;
+
+
+  if (els.mobileDownloadsBadge) {
+
+    els.mobileDownloadsBadge.hidden =
+      activeCount === 0;
+
+
+    els.mobileDownloadsBadge.textContent =
+      String(activeCount);
+
+  }
+
+  if (els.mobileDownloadsBadge) {
+
+    els.mobileDownloadsBadge.hidden =
+      activeCount === 0;
+
+
+    els.mobileDownloadsBadge.textContent =
+      String(activeCount);
+
+  }
+
+
+  /* 放这里 */
+  if (
+    els.mobileDownloadsProgress &&
+    els.mobileDownloadsProgressBar
+  ) {
+
+    els.mobileDownloadsProgress.hidden =
+      activeCount === 0;
+
+
+    const circumference =
+      2 * Math.PI * 17;
+
+
+    els.mobileDownloadsProgressBar.style
+      .strokeDasharray =
+      `${circumference}`;
+
+
+    els.mobileDownloadsProgressBar.style
+      .strokeDashoffset =
+      `${circumference *
+      (1 - overallProgress / 100)
+      }`;
+  }
+
+
+  if (
+    !els.modal?.classList.contains(
+      'hidden'
+    ) &&
+    els.modalTitle?.textContent ===
+    '下载'
+  ) {
+
+    els.modalBody.innerHTML =
+      buildDownloadManagerBody();
+    bindDownloadManagerActions();
+
+  }
+
+}
+
+function bindDownloadManagerActions() {
+
+  els.modalBody
+    ?.querySelectorAll(
+      '[data-download-playlist-id]'
+    )
+    .forEach(
+      (button) => {
+
+        button.addEventListener(
+          'click',
+          () => {
+
+            const playlistId =
+              button.dataset
+                .downloadPlaylistId;
+
+
+            const paused =
+              isMobileDownloadPaused(
+                playlistId
+              );
+
+
+            if (!paused) {
+
+              setMobileDownloadPaused(
+                playlistId,
+                true
+              );
+
+
+              const job =
+                state.playlistSaveJobs.get(
+                  playlistId
+                );
+
+
+              if (job) {
+
+                job.message =
+                  '正在暂停…';
+
+              }
+
+
+              refreshDownloadManagerUi();
+
+              return;
+
+            }
+
+
+            setMobileDownloadPaused(
+              playlistId,
+              false
+            );
+
+
+            savePlaylistToIphone(
+              playlistId
+            ).catch(
+              (error) => {
+
+                console.warn(
+                  '继续下载失败：',
+                  error
+                );
+
+              }
+            );
+
+
+            refreshDownloadManagerUi();
+
+          }
+        );
+
+      }
+    );
+  els.modalBody
+    ?.querySelectorAll(
+      '[data-cancel-download-playlist-id]'
+    )
+    .forEach(
+      (button) => {
+
+        button.addEventListener(
+          'click',
+          () => {
+
+            const playlistId =
+              button.dataset
+                .cancelDownloadPlaylistId;
+
+
+            if (
+              !window.confirm(
+                '确定取消这个下载任务吗？已经下载完成的歌曲会保留。'
+              )
+            ) {
+
+              return;
+
+            }
+
+
+            cancelMobileDownload(
+              playlistId
+            );
+
+          }
+        );
+
+      }
+    );
+  const clearHistoryButton =
+    els.modalBody
+      ?.querySelector(
+        '#clearDownloadHistoryButton'
+      );
+
+
+  clearHistoryButton
+    ?.addEventListener(
+      'click',
+      () => {
+
+        if (
+          !window.confirm(
+            '清除下载记录？手机里的歌曲不会被删除。'
+          )
+        ) {
+
+          return;
+
+        }
+
+
+        clearMobileDownloadHistory();
+
+      }
+    );
+
+}
+
+
+function openDownloadManager() {
+
+  openModal({
+
+    title:
+      '下载',
+
+    primaryText:
+      '关闭',
+
+    body:
+      buildDownloadManagerBody()
+
+  });
+  bindDownloadManagerActions();
+
 }
 
 function openModal({ title, body, primaryText = '保存', onPrimary }) {
@@ -10473,6 +11746,11 @@ function bindEvents() {
       'submit',
       createPlaylist
     );
+  els.mobileDownloadsButton
+    ?.addEventListener(
+      'click',
+      openDownloadManager
+    );
   els.settingsButton.addEventListener('click', openSettings);
   els.sleepTimerButton
     ?.addEventListener(
@@ -10729,6 +12007,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshOfflineState();
   await loadLibrary();
 
+  /*
+ * 手机重新打开以后，
+ * 恢复上次被系统暂停的下载。
+ */
+  if (
+    isMobilePlayerMode()
+  ) {
+
+    await checkServerConnection();
+
+    resumeMobileDownloads()
+      .catch(
+        (error) => {
+
+          console.warn(
+            '恢复手机下载任务失败：',
+            error
+          );
+
+        }
+      );
+
+  }
   /*
  * 如果网页在 Bilibili 下载期间刷新，
  * 恢复之前后台已经创建的任务。
