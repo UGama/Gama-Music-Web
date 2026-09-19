@@ -406,68 +406,34 @@ input::placeholder {
 
 .track-sort-select {
   width: auto;
-  min-width: 132px;
+  min-width: 88px;
   min-height: 42px;
 
   padding:
-    0 38px 0 14px;
+    0 30px 0 12px;
 
   border:
-    1px solid #dbe4f5;
+    1px solid var(--line);
 
   border-radius:
     10px;
 
   color:
-    var(--teal-strong);
+    var(--ink);
 
   background-color:
-    #f2f5fc;
+    #fff;
 
   font-size:
     13px;
 
   font-weight:
-    760;
+    700;
 
   cursor:
     pointer;
-
-  appearance:
-    none;
-
-  -webkit-appearance:
-    none;
-
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235574bb' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-
-  background-repeat:
-    no-repeat;
-
-  background-position:
-    right 12px center;
-
-  background-size:
-    14px;
 }
 
-.track-sort-select:hover {
-  border-color:
-    #c8d7fb;
-
-  background-color:
-    #eaf0ff;
-}
-
-
-.track-sort-select:focus-visible {
-  outline:
-    3px solid rgba(53, 106, 230, 0.20);
-
-  outline-offset:
-    2px;
-}
 
 @media (max-width: 719px) {
   .mobile-download-button {
@@ -483,11 +449,6 @@ input::placeholder {
   .toolbar-row .search-field {
     grid-column:
       1 / -1;
-  }
-
-
-  .track-sort-select {
-    width: 100%;
   }
 
 }
@@ -2538,6 +2499,7 @@ input[type="range"] {
 
 .download-manager-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
@@ -2667,4 +2629,48 @@ input[type="range"] {
 .mobile-download-button.download-complete .mobile-download-ring-value {
   stroke:
     var(--teal-strong);
+}
+
+.download-failure-list {
+  display: grid;
+  gap: 6px;
+
+  margin-top: 10px;
+}
+
+
+.download-failure-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 7px 9px;
+
+  border-radius: 8px;
+
+  background:
+    var(--coral-soft);
+}
+
+
+.download-failure-item span {
+  min-width: 0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  font-size: 12px;
+}
+
+
+.download-failure-item small {
+  flex: 0 0 auto;
+
+  color:
+    #9b372b;
+
+  font-size: 10px;
+  font-weight: 700;
 }

@@ -15,7 +15,8 @@ const storageKeys = {
   favoriteJobId: 'gamaMusic.favoriteJobId',
   mobileDownloadQueue: 'gamaMusic.mobileDownloadQueue',
   mobileDownloadPaused: 'gamaMusic.mobileDownloadPaused',
-  mobileDownloadHistory: 'gamaMusic.mobileDownloadHistory'
+  mobileDownloadHistory: 'gamaMusic.mobileDownloadHistory',
+  mobileDownloadFailures: 'gamaMusic.mobileDownloadFailures'
 };
 
 const offlineDb = {
@@ -1012,6 +1013,211 @@ function playlistSaveButtonState(playlist) {
   }
   return { disabled: false, label: '↓ 保存全部' };
 }
+function getStoredMobileDownloadFailures() {
+
+  try {
+
+    const value =
+      JSON.parse(
+        localStorage.getItem(
+          storageKeys.mobileDownloadFailures
+        ) || '{}'
+      );
+
+
+    return (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value)
+    )
+      ? value
+      : {};
+
+  } catch {
+
+    return {};
+
+  }
+
+}
+
+
+function saveStoredMobileDownloadFailures(
+  value
+) {
+
+  localStorage.setItem(
+    storageKeys.mobileDownloadFailures,
+    JSON.stringify(value)
+  );
+
+}
+
+function restoreMobileDownloadFailures() {
+
+  const stored =
+    getStoredMobileDownloadFailures();
+
+
+  for (
+    const [
+      playlistId,
+      failures
+    ]
+    of Object.entries(stored)
+  ) {
+
+    if (
+      !Array.isArray(failures) ||
+      !failures.length
+    ) {
+
+      continue;
+
+    }
+
+
+    const playlist =
+      state.library.playlists.find(
+        (item) =>
+          item.id === playlistId
+      );
+
+
+    if (!playlist) {
+
+      storeMobileDownloadFailures(
+        playlistId,
+        []
+      );
+
+      continue;
+
+    }
+
+
+    const existingJob =
+      state.playlistSaveJobs.get(
+        playlistId
+      );
+
+
+    if (existingJob) {
+
+      existingJob.failures =
+        failures;
+
+      continue;
+
+    }
+
+
+    state.playlistSaveJobs.set(
+      playlistId,
+      {
+
+        name:
+          playlist.name,
+
+        active:
+          false,
+
+        waitingForConnection:
+          false,
+
+        cancelled:
+          false,
+
+        failures,
+
+        progress:
+          100,
+
+        message:
+          `有 ${failures.length} 项下载失败`,
+
+        type:
+          'warning',
+
+        element:
+          null
+
+      }
+    );
+
+  }
+
+
+  refreshDownloadManagerUi();
+
+}
+
+
+function storeMobileDownloadFailures(
+  playlistId,
+  failures
+) {
+
+  const stored =
+    getStoredMobileDownloadFailures();
+
+
+  if (
+    Array.isArray(failures) &&
+    failures.length
+  ) {
+
+    stored[playlistId] =
+      failures.map(
+        (failure) => ({
+
+          trackId:
+            failure.trackId,
+
+          title:
+            failure.title ||
+            '未知歌曲',
+
+          type:
+            failure.type ||
+            'audio'
+
+        })
+      );
+
+  } else {
+
+    delete stored[
+      playlistId
+    ];
+
+  }
+
+
+  saveStoredMobileDownloadFailures(
+    stored
+  );
+
+}
+
+
+function getMobileDownloadFailures(
+  playlistId
+) {
+
+  const stored =
+    getStoredMobileDownloadFailures();
+
+
+  const failures =
+    stored[playlistId];
+
+
+  return Array.isArray(failures)
+    ? failures
+    : [];
+
+}
 
 function getMobileDownloadHistory() {
 
@@ -1096,6 +1302,66 @@ function addMobileDownloadHistory({
   saveMobileDownloadHistory(
     history
   );
+
+}
+
+function updateMobileDownloadHistory(
+  playlistId,
+  {
+    status,
+    message
+  }
+) {
+
+  const history =
+    getMobileDownloadHistory();
+
+
+  const item =
+    history.find(
+      (entry) =>
+        entry.playlistId ===
+        playlistId
+    );
+
+
+  if (!item) {
+
+    return false;
+
+  }
+
+
+  if (status) {
+
+    item.status =
+      status;
+
+  }
+
+
+  if (
+    typeof message ===
+    'string'
+  ) {
+
+    item.message =
+      message;
+
+  }
+
+
+  item.finishedAt =
+    new Date()
+      .toISOString();
+
+
+  saveMobileDownloadHistory(
+    history
+  );
+
+
+  return true;
 
 }
 
@@ -1253,6 +1519,8 @@ function setMobileDownloadPaused(
 
 }
 
+
+
 function cancelMobileDownload(
   playlistId
 ) {
@@ -1267,6 +1535,10 @@ function cancelMobileDownload(
     false
   );
 
+  storeMobileDownloadFailures(
+    playlistId,
+    []
+  );
 
   const job =
     state.playlistSaveJobs.get(
@@ -1307,6 +1579,547 @@ function cancelMobileDownload(
     });
 
   }
+
+  refreshDownloadManagerUi();
+
+}
+function removeFailedMobileDownload(
+  playlistId
+) {
+
+  removeMobileDownloadJob(
+    playlistId
+  );
+
+
+  setMobileDownloadPaused(
+    playlistId,
+    false
+  );
+
+
+  storeMobileDownloadFailures(
+    playlistId,
+    []
+  );
+
+
+  state.playlistSaveJobs.delete(
+    playlistId
+  );
+
+
+  refreshDownloadManagerUi();
+
+}
+async function retryMobileDownloadFailures(
+  playlistId
+) {
+
+  const job =
+    state.playlistSaveJobs.get(
+      playlistId
+    );
+
+
+  if (
+    !job ||
+    job.active
+  ) {
+
+    return;
+
+  }
+
+
+  const failures =
+    Array.isArray(
+      job.failures
+    )
+      ? [...job.failures]
+      : [];
+
+
+  if (!failures.length) {
+
+    return;
+
+  }
+
+
+  const trackIds =
+    Array.from(
+      new Set(
+        failures
+          .map(
+            (failure) =>
+              failure.trackId
+          )
+          .filter(Boolean)
+      )
+    );
+
+
+  if (!trackIds.length) {
+
+    return;
+
+  }
+
+
+  job.active =
+    true;
+
+  job.cancelled =
+    false;
+
+  job.waitingForConnection =
+    false;
+
+  job.failures =
+    [];
+
+  job.progress =
+    0;
+
+  job.message =
+    `正在重试失败项 · 0/${trackIds.length}`;
+
+
+  addMobileDownloadJob(
+    playlistId
+  );
+
+
+  refreshDownloadManagerUi();
+
+
+  let completed =
+    0;
+
+
+  for (
+    let index = 0;
+    index < trackIds.length;
+    index += 1
+  ) {
+
+    const trackId =
+      trackIds[index];
+
+
+    if (
+      job.cancelled
+    ) {
+
+      job.active =
+        false;
+
+      refreshDownloadManagerUi();
+
+      return;
+
+    }
+
+
+    if (
+      isMobileDownloadPaused(
+        playlistId
+      )
+    ) {
+
+      job.active =
+        false;
+
+      job.message =
+        '已暂停';
+
+
+      storeMobileDownloadFailures(
+        playlistId,
+        job.failures
+      );
+
+
+      refreshDownloadManagerUi();
+
+      return;
+    }
+
+
+    const track =
+      state.library.tracks.find(
+        (item) =>
+          item.id === trackId
+      );
+
+
+    if (!track) {
+
+      job.failures.push({
+
+        trackId,
+
+        title:
+          '未知歌曲',
+
+        type:
+          'audio'
+
+      });
+
+
+      completed +=
+        1;
+
+      continue;
+
+    }
+
+
+    /*
+     * 重试前重新检查一次 Mac。
+     */
+    if (
+      !state.serverConnected
+    ) {
+
+      await checkServerConnection();
+
+    }
+
+
+    if (
+      !navigator.onLine ||
+      !state.serverConnected
+    ) {
+
+      job.active =
+        false;
+
+      job.waitingForConnection =
+        true;
+
+
+      /*
+       * 当前这首和后面的失败项
+       * 都继续保留。
+       */
+      for (
+        let remainIndex = index;
+        remainIndex < trackIds.length;
+        remainIndex += 1
+      ) {
+
+        const remainId =
+          trackIds[remainIndex];
+
+        const remainTrack =
+          state.library.tracks.find(
+            (item) =>
+              item.id === remainId
+          );
+
+
+        if (
+          !job.failures.some(
+            (failure) =>
+              failure.trackId ===
+              remainId
+          )
+        ) {
+
+          job.failures.push({
+
+            trackId:
+              remainId,
+
+            title:
+              remainTrack?.title ||
+              '未知歌曲',
+
+            type:
+              'audio'
+
+          });
+
+        }
+
+      }
+
+
+      job.message =
+        '等待连接 Mac 服务…';
+
+
+      storeMobileDownloadFailures(
+        playlistId,
+        job.failures
+      );
+
+
+      refreshDownloadManagerUi();
+
+      return;
+
+    }
+
+
+    try {
+
+      const result =
+        await saveTrackBlobToIphone(
+
+          track,
+
+          (songPercent) => {
+
+            const progress =
+              Math.round(
+                (
+                  index +
+                  songPercent / 100
+                ) /
+                trackIds.length *
+                100
+              );
+
+
+            job.progress =
+              progress;
+
+
+            job.message =
+              `正在重试 ${index + 1}/${trackIds.length}` +
+              ` · ${track.title}`;
+
+
+            refreshDownloadManagerUi();
+
+          },
+
+          (stage) => {
+
+            if (
+              stage ===
+              'cover'
+            ) {
+
+              job.message =
+                `正在重试封面 · ${track.title}`;
+
+
+              refreshDownloadManagerUi();
+
+            }
+
+          }
+        );
+
+
+      if (
+        result.coverStatus ===
+        'failed'
+      ) {
+
+        job.failures.push({
+
+          trackId:
+            track.id,
+
+          title:
+            track.title ||
+            '未知歌曲',
+
+          type:
+            'cover'
+
+        });
+
+      }
+
+    } catch (error) {
+
+      await checkServerConnection();
+
+
+      if (
+        !navigator.onLine ||
+        !state.serverConnected
+      ) {
+
+        job.active =
+          false;
+
+        job.waitingForConnection =
+          true;
+
+
+        job.failures.push({
+
+          trackId:
+            track.id,
+
+          title:
+            track.title ||
+            '未知歌曲',
+
+          type:
+            'audio'
+
+        });
+
+
+        job.message =
+          '网络或 Mac 服务暂时不可用 · 等待重新连接…';
+
+
+        storeMobileDownloadFailures(
+          playlistId,
+          job.failures
+        );
+
+
+        refreshDownloadManagerUi();
+
+        return;
+
+      }
+
+
+      job.failures.push({
+
+        trackId:
+          track.id,
+
+        title:
+          track.title ||
+          '未知歌曲',
+
+        type:
+          'audio'
+
+      });
+
+
+      console.error(
+        '重试歌曲失败：',
+        track.title,
+        error
+      );
+
+    }
+
+
+    completed +=
+      1;
+
+
+    job.progress =
+      Math.round(
+        completed /
+        trackIds.length *
+        100
+      );
+
+
+    refreshDownloadManagerUi();
+
+  }
+
+
+  await refreshOfflineState();
+
+  render();
+
+
+  job.active =
+    false;
+
+
+  if (
+    job.failures.length
+  ) {
+
+    job.type =
+      'warning';
+
+    job.message =
+      `重试完成 · 仍有 ${job.failures.length} 项失败`;
+
+    updateMobileDownloadHistory(
+      playlistId,
+      {
+        status:
+          'warning',
+
+        message:
+          `重试后仍有 ${job.failures.length} 项失败`
+      }
+    );
+
+  } else {
+
+    job.type =
+      'info';
+
+    job.progress =
+      100;
+
+    job.waitingForConnection =
+      false;
+    job.message =
+      '失败项已全部重试成功';
+
+
+    removeMobileDownloadJob(
+      playlistId
+    );
+
+    const historyUpdated =
+      updateMobileDownloadHistory(
+        playlistId,
+        {
+          status:
+            'complete',
+
+          message:
+            '所有失败项已重新下载成功'
+        }
+      );
+
+
+    if (!historyUpdated) {
+
+      addMobileDownloadHistory({
+
+        playlistId,
+
+        name:
+          job.name,
+
+        status:
+          'complete',
+
+        message:
+          '所有失败项已重新下载成功'
+
+      });
+
+    }
+
+    showMobileDownloadCompleteFeedback();
+
+  }
+
+
+  storeMobileDownloadFailures(
+    playlistId,
+    job.failures
+  );
+
+
+  syncPlaylistSaveButtons();
 
   refreshDownloadManagerUi();
 
@@ -3948,8 +4761,7 @@ function pollFavoriteJob(jobId) {
 
       const current =
         job.currentVideo?.title ||
-        job.currentVideo?.id ||
-        '';
+        '标题不可用';
 
       const message = [
         `${job.playlistName || '收藏夹'} · ${job.processed}/${job.total}`,
@@ -4772,9 +5584,17 @@ async function savePlaylistToIphone(
   }
 
 
+  const previousJob =
+    state.playlistSaveJobs.get(
+      playlistId
+    );
+
+
   addMobileDownloadJob(
     playlistId
   );
+
+
   const job = {
     name:
       playlist.name,
@@ -4784,6 +5604,9 @@ async function savePlaylistToIphone(
 
     waitingForConnection:
       false,
+
+    failures:
+      [],
 
     element:
       previousJob?.element ||
@@ -5085,6 +5908,21 @@ async function savePlaylistToIphone(
           failedCount +=
             1;
 
+
+          job.failures.push({
+
+            trackId:
+              track.id,
+
+            title:
+              track.title ||
+              '未知歌曲',
+
+            type:
+              'cover'
+
+          });
+
         }
 
       } catch (error) {
@@ -5133,6 +5971,21 @@ async function savePlaylistToIphone(
           1;
 
 
+        job.failures.push({
+
+          trackId:
+            track.id,
+
+          title:
+            track.title ||
+            '未知歌曲',
+
+          type:
+            'audio'
+
+        });
+
+
         console.error(
           '保存歌曲失败：',
           track.title,
@@ -5165,6 +6018,12 @@ async function savePlaylistToIphone(
       }
 
 
+      storeMobileDownloadFailures(
+        playlistId,
+        job.failures
+      );
+
+
       return;
 
     }
@@ -5182,6 +6041,10 @@ async function savePlaylistToIphone(
         ? 'warning'
         : 'info',
       100
+    );
+    storeMobileDownloadFailures(
+      playlistId,
+      job.failures
     );
     if (
       !failedCount &&
@@ -5260,8 +6123,12 @@ async function savePlaylistToIphone(
     }
 
 
-    button.disabled =
-      false;
+    if (button) {
+
+      button.disabled =
+        false;
+
+    }
 
 
     syncPlaylistSaveButtons();
@@ -5678,6 +6545,12 @@ function buildDownloadManagerBody() {
           job.waitingForConnection ||
           isMobileDownloadPaused(
             playlistId
+          ) ||
+          (
+            Array.isArray(
+              job.failures
+            ) &&
+            job.failures.length > 0
           )
       );
 
@@ -5710,8 +6583,8 @@ function buildDownloadManagerBody() {
         <section class="download-manager-section">
 
           <h3 class="download-manager-section-title">
-            正在下载
-          </h3>
+  下载任务
+</h3>
 
           <div class="download-manager-list">
 
@@ -5745,8 +6618,23 @@ function buildDownloadManagerBody() {
                 : (
                   paused
                     ? '已暂停'
-                    : '正在下载'
+                    : (
+                      job.active
+                        ? '正在下载'
+                        : (
+                          job.failures?.length
+                            ? '有失败'
+                            : '已完成'
+                        )
+                    )
                 );
+            const failedOnly =
+              Boolean(
+                job.failures?.length
+              ) &&
+              !job.active &&
+              !job.waitingForConnection &&
+              !paused;
 
 
             return `
@@ -5779,45 +6667,110 @@ function buildDownloadManagerBody() {
 
                       </div>
 
+                      ${Array.isArray(job.failures) &&
+                job.failures.length
+                ? `
+      <div class="download-failure-list">
 
-                      <progress
-                        max="100"
-                        value="${progress}"
-                      ></progress>
+        ${job.failures
+                  .map(
+                    (failure) => `
+              <div class="download-failure-item">
 
+                <span>
+                  ${escapeHtml(
+                      failure.title ||
+                      '未知歌曲'
+                    )}
+                </span>
 
-                      <div class="download-manager-percent">
-                        ${progress}%
-                      </div>
+                <small>
+                  ${failure.type ===
+                        'cover'
+                        ? '封面失败'
+                        : '音频失败'
+                      }
+                </small>
+
+              </div>
+            `
+                  )
+                  .join('')}
+
+      </div>
+    `
+                : ''
+              }
+
+                      ${job.failures?.length &&
+                !job.active &&
+                !job.waitingForConnection &&
+                !paused
+                ? ''
+                : `
+      <progress
+        max="100"
+        value="${progress}"
+      ></progress>
+
+      <div class="download-manager-percent">
+        ${progress}%
+      </div>
+    `
+              }
 
 
                       <div class="download-manager-actions">
 
-                        <button
-                          class="secondary-button compact"
-                          type="button"
-                          data-download-playlist-id="${escapeHtml(
-              playlistId
-            )}"
-                        >
-                          ${paused
-                ? '继续'
-                : '暂停'
+  ${failedOnly
+                ? `
+        <button
+          class="primary-button compact"
+          type="button"
+          data-retry-download-failures="${escapeHtml(
+                  playlistId
+                )}"
+        >
+          重试失败项
+        </button>
+
+        <button
+          class="secondary-button compact"
+          type="button"
+          data-remove-failed-download="${escapeHtml(
+                  playlistId
+                )}"
+        >
+          移除
+        </button>
+      `
+                : `
+        <button
+          class="secondary-button compact"
+          type="button"
+          data-download-playlist-id="${escapeHtml(
+                  playlistId
+                )}"
+        >
+          ${paused
+                  ? '继续'
+                  : '暂停'
+                }
+        </button>
+
+        <button
+          class="secondary-button compact"
+          type="button"
+          data-cancel-download-playlist-id="${escapeHtml(
+                  playlistId
+                )}"
+        >
+          取消
+        </button>
+      `
               }
-                        </button>
 
-
-                        <button
-                          class="secondary-button compact"
-                          type="button"
-                          data-cancel-download-playlist-id="${escapeHtml(
-                playlistId
-              )}"
-                        >
-                          取消
-                        </button>
-
-                      </div>
+</div>
 
                     </div>
                   `;
@@ -5920,12 +6873,12 @@ function buildDownloadManagerBody() {
 
                       ${item.message
                 ? `
-                            <div class="download-manager-message">
-                              ${escapeHtml(
+      <div class="download-manager-message">
+        ${escapeHtml(
                   item.message
                 )}
-                            </div>
-                          `
+      </div>
+    `
                 : ''
               }
 
@@ -6060,13 +7013,20 @@ function refreshDownloadManagerUi() {
       .length;
 
   const activeJobs =
-    jobs.filter(
-      (job) =>
-        job.active &&
-        !isMobileDownloadPaused(
-          job.playlistId
-        )
-    );
+    Array.from(
+      state.playlistSaveJobs.entries()
+    )
+      .filter(
+        ([playlistId, job]) =>
+          job.active &&
+          !isMobileDownloadPaused(
+            playlistId
+          )
+      )
+      .map(
+        ([, job]) =>
+          job
+      );
 
 
   const overallProgress =
@@ -6101,17 +7061,6 @@ function refreshDownloadManagerUi() {
       )
       : 0;
 
-
-  if (els.mobileDownloadsBadge) {
-
-    els.mobileDownloadsBadge.hidden =
-      activeCount === 0;
-
-
-    els.mobileDownloadsBadge.textContent =
-      String(activeCount);
-
-  }
 
   if (els.mobileDownloadsBadge) {
 
@@ -6311,7 +7260,76 @@ function bindDownloadManagerActions() {
 
       }
     );
+  els.modalBody
+    ?.querySelectorAll(
+      '[data-retry-download-failures]'
+    )
+    .forEach(
+      (button) => {
 
+        button.addEventListener(
+          'click',
+          () => {
+
+            const playlistId =
+              button.dataset
+                .retryDownloadFailures;
+
+
+            retryMobileDownloadFailures(
+              playlistId
+            ).catch(
+              (error) => {
+
+                console.error(
+                  '重试下载失败：',
+                  error
+                );
+
+              }
+            );
+
+          }
+        );
+
+      }
+    );
+  els.modalBody
+    ?.querySelectorAll(
+      '[data-remove-failed-download]'
+    )
+    .forEach(
+      (button) => {
+
+        button.addEventListener(
+          'click',
+          () => {
+
+            const playlistId =
+              button.dataset
+                .removeFailedDownload;
+
+
+            if (
+              !window.confirm(
+                '移除这个失败任务？已经下载好的歌曲和最近下载记录都会保留。'
+              )
+            ) {
+
+              return;
+
+            }
+
+
+            removeFailedMobileDownload(
+              playlistId
+            );
+
+          }
+        );
+
+      }
+    );
 }
 
 
@@ -12174,7 +13192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   startSleepTimerMonitor();
   await refreshOfflineState();
   await loadLibrary();
-
+  restoreMobileDownloadFailures();
   /*
  * 手机重新打开以后，
  * 恢复上次被系统暂停的下载。
