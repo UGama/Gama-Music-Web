@@ -65,6 +65,8 @@ const state = {
   mobileDownloadCompleteTimer: null,
   incomingSyncActive: false,
 
+  incomingSyncCancelled: false,
+
   incomingSyncProgress: 0,
 
   incomingSyncMessage: '',
@@ -7459,6 +7461,10 @@ function bindDownloadManagerActions() {
 
 function openDownloadManager() {
 
+  const syncing =
+    state.incomingSyncActive;
+
+
   openModal({
 
     title:
@@ -7467,10 +7473,27 @@ function openDownloadManager() {
     primaryText:
       '关闭',
 
+    showCancel:
+      syncing,
+
+    cancelText:
+      '停止同步',
+
+    onCancel:
+      syncing
+        ? async () => {
+
+          stopIncomingSync();
+
+        }
+        : null,
+
     body:
       buildDownloadManagerBody()
 
   });
+
+
   bindDownloadManagerActions();
 
 }
@@ -7481,6 +7504,7 @@ function openModal({
   primaryText = '保存',
   onPrimary,
   cancelText = '取消',
+  onCancel,
   showCancel = true,
   context = ''
 }) {
@@ -7543,6 +7567,14 @@ function openModal({
 
   els.modalPrimaryButton.onclick =
     primaryHandler;
+  els.modalCancelButton.onclick =
+    async () => {
+
+      await onCancel?.();
+
+      closeModal();
+
+    };
   const input =
     els.modalBody.querySelector(
       'input[type="text"], input[type="url"], input[type="search"], input:not([type])'
@@ -7605,6 +7637,8 @@ function closeModal() {
   els.modalPrimaryButton.onclick =
     null;
 
+  els.modalCancelButton.onclick =
+    null;
 }
 
 function openTextEditor({ title, label, value, primaryText, onSave }) {
@@ -9591,6 +9625,8 @@ async function downloadIncomingSyncSnapshot(
     index += 1
   ) {
 
+    throwIfIncomingSyncCancelled();
+
     const track =
       tracks[index];
 
@@ -9745,6 +9781,7 @@ async function downloadIncomingSyncSnapshot(
 
       audioBlob =
         await audioResponse.blob();
+      throwIfIncomingSyncCancelled();
 
 
       if (!audioBlob.size) {
@@ -9813,7 +9850,7 @@ async function downloadIncomingSyncSnapshot(
       coverBlob =
         await coverResponse.blob();
 
-
+      throwIfIncomingSyncCancelled();
       if (!coverBlob.size) {
 
         coverBlob = null;
@@ -9846,6 +9883,7 @@ async function downloadIncomingSyncSnapshot(
      * MP3 + 封面真正写进
      * 手机 IndexedDB。
      */
+    throwIfIncomingSyncCancelled();
     await putOfflineTrack({
       ...(existing || {}),
 
@@ -10241,6 +10279,60 @@ async function reportIncomingSyncMissing(
 
 }
 
+function throwIfIncomingSyncCancelled() {
+
+  if (
+    !state.incomingSyncCancelled
+  ) {
+
+    return;
+
+  }
+
+
+  const error =
+    new Error(
+      '同步已停止'
+    );
+
+
+  error.code =
+    'SYNC_CANCELLED';
+
+
+  throw error;
+
+}
+
+
+function stopIncomingSync() {
+
+  if (
+    !state.incomingSyncActive
+  ) {
+
+    return;
+
+  }
+
+
+  state.incomingSyncCancelled =
+    true;
+
+  state.incomingSyncActive =
+    false;
+
+  state.incomingSyncProgress =
+    0;
+
+  state.incomingSyncMessage =
+    '同步已停止';
+
+
+  refreshDownloadManagerUi();
+
+}
+
 async function waitIncomingSyncPreparation(
   invite,
   report
@@ -10277,6 +10369,8 @@ async function waitIncomingSyncPreparation(
   while (
     Date.now() < deadline
   ) {
+
+    throwIfIncomingSyncCancelled();
 
     const response =
       await fetch(
@@ -10707,6 +10801,12 @@ async function openIncomingSyncPreview() {
           els.modalPrimaryButton.disabled =
             true;
 
+          state.incomingSyncCancelled =
+            false;
+
+
+          state.incomingSyncActive =
+            true;
           state.incomingSyncActive =
             true;
 
@@ -10824,10 +10924,19 @@ async function openIncomingSyncPreview() {
 
           } catch (error) {
 
+            if (
+              error?.code ===
+              'SYNC_CANCELLED'
+            ) {
+
+              return;
+
+            }
+
+
             window.alert(
               `同步失败：${error.message}`
             );
-
 
           } finally {
 
@@ -13328,7 +13437,6 @@ function bindEvents() {
   });
 
   els.modalCloseButton.addEventListener('click', closeModal);
-  els.modalCancelButton.addEventListener('click', closeModal);
   els.modal.addEventListener('click', (event) => {
     if (event.target === els.modal) closeModal();
   });
