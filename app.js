@@ -11,7 +11,8 @@ const storageKeys = {
   trackSort: 'gamaMusic.trackSort',
   sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt',
   syncClientId: 'gamaMusic.syncClientId',
-  downloadJobId: 'gamaMusic.downloadJobId'
+  downloadJobId: 'gamaMusic.downloadJobId',
+  favoriteJobId: 'gamaMusic.favoriteJobId'
 };
 
 const offlineDb = {
@@ -2781,7 +2782,16 @@ async function startFavoriteImport(event) {
       job.progress
     );
 
-    pollFavoriteJob(job.id);
+
+    localStorage.setItem(
+      storageKeys.favoriteJobId,
+      job.id
+    );
+
+
+    pollFavoriteJob(
+      job.id
+    );
 
   } catch (error) {
     setFavoriteStatus(error.message, 'warning');
@@ -3434,13 +3444,13 @@ function pollFavoriteJob(jobId) {
             (
               job.failed
                 ? (
-                    ` · B站下载失败 ${job.failed} 首` +
-                    (
-                      failureSummary
-                        ? `（${failureSummary}）`
-                        : ''
-                    )
+                  ` · B站下载失败 ${job.failed} 首` +
+                  (
+                    failureSummary
+                      ? `（${failureSummary}）`
+                      : ''
                   )
+                )
                 : ''
             ),
             (
@@ -3458,17 +3468,42 @@ function pollFavoriteJob(jobId) {
             100
           );
         }
+        localStorage.removeItem(
+          storageKeys.favoriteJobId
+        );
       }
 
     } catch (error) {
-      window.clearInterval(state.favoriteJobTimer);
 
-      els.favoriteImportButton.disabled = false;
+      window.clearInterval(
+        state.favoriteJobTimer
+      );
+
+
+      if (
+        String(
+          error?.message || ''
+        ).includes(
+          '没有找到这个收藏夹导入任务'
+        )
+      ) {
+
+        localStorage.removeItem(
+          storageKeys.favoriteJobId
+        );
+
+      }
+
+
+      els.favoriteImportButton.disabled =
+        false;
+
 
       setFavoriteStatus(
         error.message,
         'warning'
       );
+
     }
 
   }, 1200);
