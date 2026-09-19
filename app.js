@@ -3731,9 +3731,9 @@ function formatFavoriteFailureExamples(
       (failure) => {
 
         const title =
-          failure?.title ||
-          failure?.id ||
-          '未知视频';
+          favoriteFailureDisplayTitle(
+            failure
+          );
 
 
         const category =
@@ -3747,6 +3747,43 @@ function formatFavoriteFailureExamples(
       }
     )
     .join('、');
+
+}
+
+function favoriteFailureDisplayTitle(
+  failure
+) {
+
+  const title =
+    String(
+      failure?.title || ''
+    ).trim();
+
+
+  const id =
+    String(
+      failure?.id || ''
+    ).trim();
+
+
+  /*
+   * 不把 BV 号当成用户可读标题。
+   */
+  if (
+    title &&
+    title.toLowerCase() !==
+    id.toLowerCase() &&
+    !/^BV[0-9A-Za-z]+$/i.test(
+      title
+    )
+  ) {
+
+    return title;
+
+  }
+
+
+  return '标题不可用';
 
 }
 
@@ -3779,10 +3816,9 @@ function buildFavoriteFailureDetails(
         (failure) => {
 
           const title =
-            failure?.title ||
-            failure?.id ||
-            '未知视频';
-
+            favoriteFailureDisplayTitle(
+              failure
+            );
 
           const category =
             classifyFavoriteFailure(
@@ -3800,18 +3836,7 @@ function buildFavoriteFailureDetails(
   ${escapeHtml(category)}
 </div>
 
-${failure?.error
-              ? `
-    <details>
-      <summary>查看原始错误</summary>
 
-      <div class="track-meta">
-        ${escapeHtml(failure.error)}
-      </div>
-    </details>
-  `
-              : ''
-            }
               </div>
             `;
 
@@ -4750,7 +4775,20 @@ async function savePlaylistToIphone(
   addMobileDownloadJob(
     playlistId
   );
-  const job = { name: playlist.name, active: true, element: previousJob?.element || null };
+  const job = {
+    name:
+      playlist.name,
+
+    active:
+      true,
+
+    waitingForConnection:
+      false,
+
+    element:
+      previousJob?.element ||
+      null
+  };
   state.playlistSaveJobs.set(playlistId, job);
   const report = (message, type = 'info', progress = null) =>
     updatePlaylistSaveStatus(playlistId, message, type, progress);
@@ -4768,9 +4806,15 @@ async function savePlaylistToIphone(
   let coverSavedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
+
   let completedSuccessfully =
     false;
 
+  let stoppedEarly =
+    false;
+
+  let waitingForConnection =
+    false;
   try {
     if (navigator.storage?.persist) {
       await navigator.storage
@@ -4788,11 +4832,8 @@ async function savePlaylistToIphone(
         job.cancelled
       ) {
 
-        break;
-
-      } if (
-        job.cancelled
-      ) {
+        stoppedEarly =
+          true;
 
         break;
 
@@ -4803,14 +4844,19 @@ async function savePlaylistToIphone(
         )
       ) {
 
+        stoppedEarly =
+          true;
+
         job.active =
           false;
+
 
         report(
           `“${playlist.name}”已暂停`,
           'info',
           job.progress ?? 0
         );
+
 
         break;
 
@@ -4874,9 +4920,32 @@ async function savePlaylistToIphone(
        * 缺 MP3 或缺封面，
        * 都需要 Mac。
        */
-      if (!state.serverConnected) {
-        failedCount += 1;
-        continue;
+      if (
+        !state.serverConnected
+      ) {
+
+        stoppedEarly =
+          true;
+
+        waitingForConnection =
+          true;
+
+        job.waitingForConnection =
+          true;
+
+        job.active =
+          false;
+
+
+        report(
+          `“${playlist.name}”等待连接 Mac 服务…`,
+          'info',
+          job.progress ?? 0
+        );
+
+
+        break;
+
       }
 
 
@@ -4979,17 +5048,97 @@ async function savePlaylistToIphone(
           result.coverStatus ===
           'failed'
         ) {
-          failedCount += 1;
+
+          await checkServerConnection();
+
+
+          if (
+            !navigator.onLine ||
+            !state.serverConnected
+          ) {
+
+            stoppedEarly =
+              true;
+
+            waitingForConnection =
+              true;
+
+            job.waitingForConnection =
+              true;
+
+            job.active =
+              false;
+
+
+            report(
+              `封面下载中断 · 等待重新连接…`,
+              'info',
+              job.progress ?? 0
+            );
+
+
+            break;
+
+          }
+
+
+          failedCount +=
+            1;
+
         }
 
       } catch (error) {
-        failedCount += 1;
+
+        await checkServerConnection();
+
+
+        if (
+          !navigator.onLine ||
+          !state.serverConnected
+        ) {
+
+          stoppedEarly =
+            true;
+
+          waitingForConnection =
+            true;
+
+          job.waitingForConnection =
+            true;
+
+          job.active =
+            false;
+
+
+          report(
+            `网络或 Mac 服务暂时不可用 · 等待重新连接…`,
+            'info',
+            job.progress ?? 0
+          );
+
+
+          console.warn(
+            '手机下载暂时中断，等待恢复：',
+            track.title,
+            error
+          );
+
+
+          break;
+
+        }
+
+
+        failedCount +=
+          1;
+
 
         console.error(
           '保存歌曲失败：',
           track.title,
           error
         );
+
       }
     }
 
@@ -5002,7 +5151,23 @@ async function savePlaylistToIphone(
 
     render();
 
+    if (
+      stoppedEarly
+    ) {
 
+      if (
+        waitingForConnection
+      ) {
+
+        job.waitingForConnection =
+          true;
+
+      }
+
+
+      return;
+
+    }
     report(
       `“${playlist.name}”保存完成` +
       ` · 新保存 MP3 ${audioSavedCount} 首` +
@@ -5510,6 +5675,7 @@ function buildDownloadManagerBody() {
       .filter(
         ([playlistId, job]) =>
           job.active ||
+          job.waitingForConnection ||
           isMobileDownloadPaused(
             playlistId
           )
@@ -5574,9 +5740,13 @@ function buildDownloadManagerBody() {
 
 
             const stateText =
-              paused
-                ? '已暂停'
-                : '正在下载';
+              job.waitingForConnection
+                ? '等待连接'
+                : (
+                  paused
+                    ? '已暂停'
+                    : '正在下载'
+                );
 
 
             return `
@@ -5886,10 +6056,8 @@ function refreshDownloadManagerUi() {
 
 
   const activeCount =
-    jobs.filter(
-      (job) =>
-        job.active
-    ).length;
+    getMobileDownloadQueue()
+      .length;
 
   const activeJobs =
     jobs.filter(
@@ -5964,7 +6132,7 @@ function refreshDownloadManagerUi() {
   ) {
 
     els.mobileDownloadsProgress.hidden =
-      activeCount === 0;
+      activeJobs.length === 0;
 
 
     const circumference =
