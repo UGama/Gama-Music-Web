@@ -2799,6 +2799,118 @@ async function startFavoriteImport(event) {
   }
 }
 
+async function retryFavoriteFailures(
+  jobId
+) {
+
+  if (!jobId) {
+    return;
+  }
+
+
+  const existingTracks =
+    state.library.tracks
+      .filter(
+        (track) =>
+          state.offlineTrackIds.has(
+            track.id
+          )
+      )
+      .map(
+        (track) => ({
+          id:
+            track.id,
+
+          title:
+            track.title,
+
+          originalTitle:
+            track.originalTitle,
+
+          file:
+            track.file || null,
+
+          cover:
+            track.cover || null,
+
+          sourceKey:
+            track.sourceKey ||
+            track.source?.key ||
+            null,
+
+          source:
+            track.source || null,
+
+          duration:
+            track.duration || null,
+
+          uploader:
+            track.uploader || null,
+
+          createdAt:
+            track.createdAt || null,
+
+          updatedAt:
+            track.updatedAt || null,
+
+          localOnly:
+            true
+        })
+      );
+
+
+  els.favoriteImportButton.disabled =
+    true;
+
+
+  setFavoriteStatus(
+    '正在重新尝试失败的歌曲……',
+    'info',
+    1
+  );
+
+
+  try {
+
+    const { job } =
+      await api(
+        `/api/favorites/jobs/${encodeURIComponent(jobId)}/retry-failures`,
+        {
+          method:
+            'POST',
+
+          body: {
+            existingTracks
+          }
+        }
+      );
+
+
+    localStorage.setItem(
+      storageKeys.favoriteJobId,
+      job.id
+    );
+
+
+    pollFavoriteJob(
+      job.id
+    );
+
+  } catch (error) {
+
+    els.favoriteImportButton.disabled =
+      false;
+
+
+    setFavoriteStatus(
+      error.message,
+      'warning'
+    );
+
+  }
+
+}
+
 async function saveFavoriteTracksToWeb(
   tracks,
   playlistName
@@ -3287,8 +3399,21 @@ function buildFavoriteFailureDetails(
                 </strong>
 
                 <div class="track-meta">
-                  ${escapeHtml(category)}
-                </div>
+  ${escapeHtml(category)}
+</div>
+
+${failure?.error
+              ? `
+    <details>
+      <summary>查看原始错误</summary>
+
+      <div class="track-meta">
+        ${escapeHtml(failure.error)}
+      </div>
+    </details>
+  `
+              : ''
+            }
               </div>
             `;
 
@@ -3303,8 +3428,15 @@ function buildFavoriteFailureDetails(
 
 
 function showFavoriteFailureDetails(
-  failures
+  failures,
+  jobId
 ) {
+
+  const count =
+    Array.isArray(failures)
+      ? failures.length
+      : 0;
+
 
   openModal({
 
@@ -3312,19 +3444,29 @@ function showFavoriteFailureDetails(
       'Bilibili 导入失败详情',
 
     primaryText:
-      '关闭',
+      `只重试失败的 ${count} 首`,
 
     body:
       buildFavoriteFailureDetails(
         failures
-      )
+      ),
+
+    onPrimary:
+      async () => {
+
+        await retryFavoriteFailures(
+          jobId
+        );
+
+      }
 
   });
 
 }
 
 function addFavoriteFailureDetailsButton(
-  failures
+  failures,
+  jobId
 ) {
 
   if (
@@ -3359,9 +3501,9 @@ function addFavoriteFailureDetailsButton(
     () => {
 
       showFavoriteFailureDetails(
-        failures
+        failures,
+        jobId
       );
-
     }
   );
 
@@ -3642,9 +3784,9 @@ function pollFavoriteJob(jobId) {
           ) {
 
             addFavoriteFailureDetailsButton(
-              job.failures
+              job.failures,
+              job.id
             );
-
           }
         } else {
           setFavoriteStatus(
