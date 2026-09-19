@@ -10646,6 +10646,8 @@ async function openIncomingSyncPreview() {
       cancelText:
         '取消',
 
+      showCancel:
+        true,
       body: `
         <p class="settings-note">
           已成功连接电脑上的
