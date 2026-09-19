@@ -3205,6 +3205,40 @@ function summarizeFavoriteFailures(
 
 }
 
+function formatFavoriteFailureExamples(
+  failures
+) {
+
+  const items =
+    Array.isArray(failures)
+      ? failures
+      : [];
+
+
+  return items
+    .slice(0, 5)
+    .map(
+      (failure) => {
+
+        const title =
+          failure?.title ||
+          failure?.id ||
+          '未知视频';
+
+
+        const category =
+          classifyFavoriteFailure(
+            failure?.error
+          );
+
+
+        return `${title}（${category}）`;
+
+      }
+    )
+    .join('、');
+
+}
 function pollFavoriteJob(jobId) {
   window.clearInterval(state.favoriteJobTimer);
 
@@ -3431,6 +3465,10 @@ function pollFavoriteJob(jobId) {
             job.failures
           );
 
+        const failureExamples =
+          formatFavoriteFailureExamples(
+            job.failures
+          );
         if (job.status === 'complete') {
           setFavoriteStatus(
             `同步完成：${job.playlistName}` +
@@ -3448,6 +3486,11 @@ function pollFavoriteJob(jobId) {
                   (
                     failureSummary
                       ? `（${failureSummary}）`
+                      : ''
+                  ) +
+                  (
+                    failureExamples
+                      ? ` · 失败示例：${failureExamples}`
                       : ''
                   )
                 )
@@ -10435,6 +10478,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     );
 
   }
+
+
+  /*
+   * 如果网页在收藏夹导入期间刷新，
+   * 恢复之前后台已经创建的收藏夹任务。
+   */
+  const favoriteJobId =
+    String(
+      localStorage.getItem(
+        storageKeys.favoriteJobId
+      ) || ''
+    ).trim();
+
+
+  if (favoriteJobId) {
+
+    els.favoriteImportButton.disabled =
+      true;
+
+
+    setFavoriteStatus(
+      '正在恢复未完成的 Bilibili 收藏夹导入……',
+      'info',
+      1
+    );
+
+
+    pollFavoriteJob(
+      favoriteJobId
+    );
+
+  }
+
 
   /*
    * 如果 URL 里带有手机同步邀请，
