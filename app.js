@@ -1013,7 +1013,7 @@ function setFavoriteStatus(
         `
         : ''
     ) +
-    `<div>${escapeHtml(message)}</div>` +
+    `<div>${escapeHtml(message).replaceAll('\n', '<br>')}</div>` +
     (
       progress === null
         ? ''
@@ -3239,6 +3239,139 @@ function formatFavoriteFailureExamples(
     .join('、');
 
 }
+
+function buildFavoriteFailureDetails(
+  failures
+) {
+
+  const items =
+    Array.isArray(failures)
+      ? failures
+      : [];
+
+
+  if (!items.length) {
+
+    return `
+      <div class="empty-state">
+        没有失败项目。
+      </div>
+    `;
+
+  }
+
+
+  return `
+    <div class="choice-list">
+
+      ${items
+      .map(
+        (failure) => {
+
+          const title =
+            failure?.title ||
+            failure?.id ||
+            '未知视频';
+
+
+          const category =
+            classifyFavoriteFailure(
+              failure?.error
+            );
+
+
+          return `
+              <div class="choice-item">
+                <strong>
+                  ${escapeHtml(title)}
+                </strong>
+
+                <div class="track-meta">
+                  ${escapeHtml(category)}
+                </div>
+              </div>
+            `;
+
+        }
+      )
+      .join('')}
+
+    </div>
+  `;
+
+}
+
+
+function showFavoriteFailureDetails(
+  failures
+) {
+
+  openModal({
+
+    title:
+      'Bilibili 导入失败详情',
+
+    primaryText:
+      '关闭',
+
+    body:
+      buildFavoriteFailureDetails(
+        failures
+      )
+
+  });
+
+}
+
+function addFavoriteFailureDetailsButton(
+  failures
+) {
+
+  if (
+    !els.favoriteImportStatus ||
+    !Array.isArray(failures) ||
+    !failures.length
+  ) {
+
+    return;
+
+  }
+
+
+  const button =
+    document.createElement(
+      'button'
+    );
+
+
+  button.type =
+    'button';
+
+  button.className =
+    'secondary-button compact';
+
+  button.textContent =
+    `查看全部失败（${failures.length}）`;
+
+
+  button.addEventListener(
+    'click',
+    () => {
+
+      showFavoriteFailureDetails(
+        failures
+      );
+
+    }
+  );
+
+
+  els.favoriteImportStatus.append(
+    button
+  );
+
+}
+
 function pollFavoriteJob(jobId) {
   window.clearInterval(state.favoriteJobTimer);
 
@@ -3485,7 +3618,7 @@ function pollFavoriteJob(jobId) {
                   ` · B站下载失败 ${job.failed} 首` +
                   (
                     failureSummary
-                      ? `（${failureSummary}）`
+                      ? `\n失败示例：${failureExamples}`
                       : ''
                   ) +
                   (
@@ -3504,6 +3637,15 @@ function pollFavoriteJob(jobId) {
               : 'info',
             100
           );
+          if (
+            job.failures?.length
+          ) {
+
+            addFavoriteFailureDetailsButton(
+              job.failures
+            );
+
+          }
         } else {
           setFavoriteStatus(
             job.error || '收藏夹导入失败',
