@@ -853,6 +853,14 @@ input[type="range"] {
   margin-top: 14px;
 }
 
+/*
+ * 只有一个按钮时，让主按钮占满整行，
+ * 不要留在右半边。
+ */
+#modalCancelButton[hidden]+#modalPrimaryButton {
+  grid-column: 1 / -1;
+}
+
 .choice-list {
   display: grid;
   gap: 8px;
@@ -2568,21 +2576,18 @@ input[type="range"] {
   top: 50%;
   left: 50%;
 
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
+
+  z-index: 1;
 
   pointer-events: none;
 
   transform:
-    translate(-50%, -50%)
-    rotate(-90deg);
+    translate(-50%, -50%) rotate(-90deg);
 }
 
 
-/*
- * iOS PWA 下显式保证 hidden
- * 一定真的隐藏圆环。
- */
 .mobile-download-button .mobile-download-ring[hidden] {
   display: none !important;
 }
@@ -2591,13 +2596,13 @@ input[type="range"] {
 .mobile-download-ring circle {
   fill: none;
 
-  stroke-width: 2.4;
+  stroke-width: 3.2;
 }
 
 
 .mobile-download-ring-track {
   stroke:
-    rgba(53, 106, 230, 0.16);
+    rgba(53, 106, 230, 0.32);
 }
 
 
@@ -2610,6 +2615,16 @@ input[type="range"] {
 
   transition:
     stroke-dashoffset 180ms ease;
+}
+
+.mobile-download-button>svg:not(.mobile-download-ring) {
+  position: relative;
+  z-index: 2;
+}
+
+
+.mobile-download-button .download-count-badge {
+  z-index: 3;
 }
 
 .mobile-download-button.download-complete>svg:not(.mobile-download-ring) {
