@@ -5018,12 +5018,12 @@ function pollFavoriteJob(jobId) {
                   ` · B站下载失败 ${job.failed} 首` +
                   (
                     failureSummary
-                      ? `\n失败示例：${failureExamples}`
+                      ? `（${failureSummary}）`
                       : ''
                   ) +
                   (
                     failureExamples
-                      ? ` · 失败示例：${failureExamples}`
+                      ? `\n失败示例：${failureExamples}`
                       : ''
                   )
                 )
