@@ -2690,3 +2690,614 @@ input[type="range"] {
   font-size: 10px;
   font-weight: 700;
 }
+
+/* =========================================================
+   Gama Music · Mobile UI polish
+   放在 styles.css 最末尾
+   ========================================================= */
+
+@media (max-width: 719px) {
+
+  /* ---------- 整体 ---------- */
+
+  body {
+    background: #f5f7fb;
+  }
+
+  .app-shell {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+
+  /* ---------- 顶部品牌栏 ---------- */
+
+  .topbar {
+    padding-bottom: 16px;
+  }
+
+  .brand {
+    gap: 11px;
+  }
+
+  .brand img {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+
+    box-shadow:
+      0 5px 16px rgba(20, 35, 70, 0.14);
+  }
+
+  .brand-name {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+  }
+
+  .brand-subtitle {
+    margin-top: 3px;
+
+    color: #7a8492;
+
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+
+  /* 顶部 下载 / 设置 */
+
+  .topbar-actions {
+    gap: 9px;
+  }
+
+  #settingsButton,
+  .mobile-download-button:not(.download-progress-active) {
+    width: 42px;
+    height: 42px;
+
+    border: 1px solid #dde3ed;
+    border-radius: 14px;
+
+    background: rgba(255, 255, 255, 0.92);
+
+    box-shadow:
+      0 2px 8px rgba(20, 35, 70, 0.04);
+  }
+
+
+  /* ---------- 主内容大卡片 ---------- */
+
+  .content-surface {
+    padding: 12px;
+
+    border:
+      1px solid rgba(216, 223, 234, 0.9);
+
+    border-radius: 20px;
+
+    background:
+      rgba(255, 255, 255, 0.94);
+
+    box-shadow:
+      0 8px 28px rgba(24, 39, 75, 0.06);
+  }
+
+
+  /* ---------- 歌曲 / 播放列表切换 ---------- */
+
+  .segmented {
+    padding: 4px;
+    gap: 4px;
+
+    border:
+      1px solid #e2e7ef;
+
+    border-radius: 17px;
+
+    background: #f0f3f8;
+  }
+
+  .segmented button {
+    min-height: 46px;
+
+    border-radius: 13px;
+
+    color: #7d8796;
+
+    font-size: 15px;
+    font-weight: 750;
+
+    background: transparent;
+  }
+
+  .segmented button.active {
+    color: #2453bc;
+
+    background: #ffffff;
+
+    box-shadow:
+      0 2px 8px rgba(20, 35, 70, 0.07),
+      0 0 0 1px rgba(53, 106, 230, 0.05);
+  }
+
+
+  /* ---------- 搜索 + 排序 + 播放全部 ---------- */
+
+  .view-pane {
+    margin-top: 16px;
+  }
+
+  .toolbar-row {
+    display: grid;
+
+    grid-template-columns:
+      auto 1fr;
+
+    grid-template-areas:
+      "search search"
+      "sort play";
+
+    gap: 12px;
+
+    align-items: center;
+  }
+
+  .toolbar-row .search-field {
+    grid-area: search;
+  }
+
+
+  /* 搜索框 */
+
+  #searchInput {
+    min-height: 50px;
+
+    padding:
+      0 16px;
+
+    border:
+      1px solid #e1e6ef;
+
+    border-radius: 16px;
+
+    color: #111827;
+
+    background: #f7f8fb;
+
+    font-size: 15px;
+
+    box-shadow:
+      inset 0 1px 2px rgba(20, 35, 70, 0.015);
+
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  #searchInput::placeholder {
+    color: #a2a9b4;
+  }
+
+  #searchInput:focus {
+    border-color:
+      rgba(53, 106, 230, 0.42);
+
+    background: #ffffff;
+
+    outline: none;
+
+    box-shadow:
+      0 0 0 3px rgba(53, 106, 230, 0.09);
+  }
+
+
+  /* 排序 */
+
+  .track-sort-select {
+    grid-area: sort;
+
+    appearance: none;
+    -webkit-appearance: none;
+
+    width: 108px;
+    min-width: 108px;
+    min-height: 40px;
+
+    justify-self: start;
+
+    padding:
+      0 34px 0 14px;
+
+    border:
+      1px solid #e0e5ee;
+
+    border-radius: 999px;
+
+    color: #303746;
+
+    background-color: #ffffff;
+
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2368707c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+
+    background-repeat: no-repeat;
+    background-position:
+      right 11px center;
+
+    font-size: 14px;
+    font-weight: 700;
+
+    box-shadow:
+      0 2px 7px rgba(20, 35, 70, 0.035);
+  }
+
+
+  /* 播放全部：作为主要操作 */
+
+  #playAllButton {
+    grid-area: play;
+
+    justify-self: end;
+
+    min-height: 40px;
+
+    padding:
+      0 18px;
+
+    border: 0;
+
+    border-radius: 13px;
+
+    color: #ffffff;
+
+    background:
+      linear-gradient(180deg,
+        #3f72ee 0%,
+        #2859d0 100%);
+
+    font-size: 14px;
+    font-weight: 800;
+
+    box-shadow:
+      0 6px 16px rgba(36, 83, 188, 0.20);
+  }
+
+  #playAllButton:active {
+    transform: scale(0.96);
+
+    box-shadow:
+      0 3px 9px rgba(36, 83, 188, 0.16);
+  }
+
+
+  /* ---------- 本地容量信息 ---------- */
+
+  .offline-summary {
+    margin-top: 14px;
+
+    color: #6f7b8d;
+
+    font-size: 12px;
+    font-weight: 650;
+
+    letter-spacing: 0.05px;
+  }
+
+
+  /* ---------- 歌曲列表 ---------- */
+
+  .track-list {
+    gap: 9px;
+
+    margin-top: 13px;
+  }
+
+
+  /* 歌曲卡片 */
+
+  .track-card {
+    grid-template-columns:
+      66px minmax(0, 1fr);
+
+    grid-template-rows:
+      auto auto;
+
+    grid-template-areas:
+      "cover copy"
+      "cover actions";
+
+    min-height: 84px;
+
+    column-gap: 11px;
+    row-gap: 5px;
+
+    padding: 8px 9px;
+
+    border:
+      1px solid #e5e9f0;
+
+    border-radius: 16px;
+
+    background: #ffffff;
+
+    box-shadow:
+      0 2px 9px rgba(22, 34, 58, 0.025);
+  }
+
+
+  /* 正在播放 */
+
+  .track-card.active {
+    border-color:
+      rgba(53, 106, 230, 0.50);
+
+    background:
+      linear-gradient(135deg,
+        #f8faff 0%,
+        #f1f5ff 100%);
+
+    box-shadow:
+      0 4px 14px rgba(53, 106, 230, 0.08);
+  }
+
+
+  /* 封面 */
+
+  .track-cover {
+    width: 66px;
+    height: 66px;
+
+    border-radius: 13px;
+
+    box-shadow:
+      0 4px 12px rgba(25, 40, 72, 0.10);
+  }
+
+
+  /* 标题 */
+
+  .track-title {
+    color: #151922;
+
+    font-size: 15px;
+    font-weight: 780;
+
+    letter-spacing: -0.1px;
+  }
+
+
+  /* 作者 / 时长 */
+
+  .track-meta {
+    margin-top: 4px;
+
+    color: #7d8796;
+
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+
+  /* 卡片右下角操作 */
+
+  .track-actions {
+    gap: 6px;
+  }
+
+  .track-actions .mini-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+
+    padding: 0;
+
+    border:
+      1px solid #e1e6ee;
+
+    border-radius: 11px;
+
+    color: #303746;
+
+    background: #f9fafc;
+
+    box-shadow: none;
+  }
+
+  .track-actions .mini-button:active {
+    background: #edf1f7;
+  }
+
+
+  /* ---------- 播放列表卡片 ---------- */
+
+  .playlist-card {
+    padding: 9px;
+
+    border:
+      1px solid #e5e9f0;
+
+    border-radius: 16px;
+
+    background: #ffffff;
+
+    box-shadow:
+      0 2px 9px rgba(22, 34, 58, 0.025);
+  }
+
+  .playlist-cover {
+    border-radius: 13px;
+  }
+
+
+  /* ---------- 底部播放器 ---------- */
+
+  .player {
+    gap: 10px;
+
+    padding:
+      10px 14px calc(env(safe-area-inset-bottom) + 8px);
+
+    border-top:
+      1px solid rgba(216, 223, 234, 0.95);
+
+    border-radius:
+      22px 22px 0 0;
+
+    background:
+      rgba(255, 255, 255, 0.94);
+
+    box-shadow:
+      0 -10px 35px rgba(20, 35, 70, 0.12);
+
+    backdrop-filter:
+      blur(26px);
+
+    -webkit-backdrop-filter:
+      blur(26px);
+  }
+
+
+  /* 左侧播放封面 */
+
+  .player-art {
+    width: 46px;
+    height: 46px;
+
+    border-radius: 12px;
+
+    box-shadow:
+      0 5px 14px rgba(20, 35, 70, 0.14);
+  }
+
+
+  /* 当前歌曲 */
+
+  .now-copy p {
+    color: #151922;
+
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .now-copy span {
+    margin-top: 3px;
+
+    color: #7d8796;
+
+    font-size: 11px;
+  }
+
+
+  /* 主播放按钮 */
+
+  .icon-button.strong {
+    width: 44px;
+    height: 44px;
+
+    border: 0;
+
+    border-radius: 14px;
+
+    background:
+      linear-gradient(180deg,
+        #3f72ee,
+        #2859d0);
+
+    box-shadow:
+      0 6px 16px rgba(36, 83, 188, 0.22);
+  }
+
+
+  /* 播放模式按钮一整排 */
+
+  .mode-row {
+    grid-template-columns:
+      repeat(6, 38px);
+
+    gap: 9px;
+
+    margin-top: 5px;
+  }
+
+  .mode-row>.icon-button,
+  .mode-button {
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+
+    border:
+      1px solid #e1e7f1;
+
+    border-radius: 50%;
+
+    color: #5d74aa;
+
+    background: #f6f8fc;
+
+    box-shadow: none;
+  }
+
+  .mode-button:not(.active) {
+    color: #6077aa;
+
+    background: #f6f8fc;
+  }
+
+  .mode-button.active {
+    color: #ffffff;
+
+    border-color:
+      #315fd0;
+
+    background:
+      linear-gradient(180deg,
+        #4274ee,
+        #2b59ce);
+
+    box-shadow:
+      0 4px 10px rgba(36, 83, 188, 0.20);
+  }
+
+  .mode-row>.icon-button svg,
+  .mode-button svg {
+    width: 19px;
+    height: 19px;
+  }
+
+
+  /* ---------- 播放进度 ---------- */
+
+  .progress-row {
+    margin-top: 3px;
+
+    color: #7f8896;
+
+    font-size: 10px;
+  }
+
+  .progress-row input[type="range"] {
+    accent-color: #356ae6;
+  }
+
+
+  /* ---------- 状态消息 ---------- */
+
+  .global-mobile-status:not([hidden]) {
+    margin:
+      11px 0 2px;
+
+    padding:
+      10px 12px;
+
+    border:
+      1px solid #dce5f7;
+
+    border-radius: 13px;
+
+    color: #3158b9;
+
+    background: #f3f6fd;
+  }
+}
