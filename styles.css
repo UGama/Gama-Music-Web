@@ -168,8 +168,8 @@ p {
 
 .download-count-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -12px;
+  right: -12px;
 
   min-width: 18px;
   height: 18px;
@@ -2586,18 +2586,16 @@ input[type="range"] {
  * 不使用 mask，兼容 iOS Safari / PWA。
  */
 .mobile-download-button.download-progress-active {
-  border:
-    3px solid transparent;
+  border: 3px solid transparent;
 
   background:
-    linear-gradient(#fff,
-      #fff) padding-box,
+    linear-gradient(#fff, #fff) padding-box,
 
-    conic-gradient(from -90deg,
+    conic-gradient(from 0deg,
 
       #0b57d0 0 var(--download-progress, 0%),
 
-      #c7d7f7 var(--download-progress, 0%) 100%) border-box;
+      var(--line) var(--download-progress, 0%) 100%) border-box;
 }
 
 
