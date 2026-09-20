@@ -10338,39 +10338,22 @@ async function waitIncomingSyncPreparation(
   report
 ) {
 
-  const missingAudioTrackIds =
-    Array.isArray(
-      report?.missing
-        ?.audioTrackIds
-    )
-      ? report.missing
-        .audioTrackIds
-      : [];
+  const STALL_TIMEOUT_MS =
+    10 * 60 * 1000;
 
 
-  const missingCoverTrackIds =
-    Array.isArray(
-      report?.missing
-        ?.coverTrackIds
-    )
-      ? report.missing
-        .coverTrackIds
-      : [];
+  let lastProgressAt =
+    Date.now();
 
 
+  let lastProgressSignature =
+    '';
 
 
-
-  const deadline =
-    Date.now() +
-    5 * 60 * 1000;
-
-
-  while (
-    Date.now() < deadline
-  ) {
+  while (true) {
 
     throwIfIncomingSyncCancelled();
+
 
     const response =
       await fetch(
@@ -10405,12 +10388,73 @@ async function waitIncomingSyncPreparation(
 
     const session =
       data.session || {};
-    /*
- * 把 Desktop 当前准备进度
- * 直接显示在手机同步弹窗里。
- */
+
+
     const preparation =
       session.preparation || null;
+
+
+    const total =
+      Number(
+        preparation?.total || 0
+      );
+
+
+    const completed =
+      Number(
+        preparation?.completed || 0
+      );
+
+
+    const failed =
+      Number(
+        preparation?.failed || 0
+      );
+
+
+    /*
+     * 只要状态或进度变化，
+     * 就认为同步仍然正常推进。
+     */
+    const progressSignature =
+      [
+        session.status || '',
+        preparation?.status || '',
+        total,
+        completed,
+        failed
+      ].join('|');
+
+
+    if (
+      progressSignature !==
+      lastProgressSignature
+    ) {
+
+      lastProgressSignature =
+        progressSignature;
+
+      lastProgressAt =
+        Date.now();
+
+    }
+
+
+    /*
+     * 连续 10 分钟没有任何变化，
+     * 才判断同步卡住。
+     */
+    if (
+      Date.now() -
+      lastProgressAt >=
+      STALL_TIMEOUT_MS
+    ) {
+
+      throw new Error(
+        '同步准备长时间没有进展，请检查 Mac 服务或网络连接。'
+      );
+
+    }
 
 
     let preparationMessage =
@@ -10419,6 +10463,8 @@ async function waitIncomingSyncPreparation(
 
     let preparationDetail =
       '请保持这个页面打开。';
+
+
     let preparationProgress =
       Math.max(
         5,
@@ -10429,28 +10475,11 @@ async function waitIncomingSyncPreparation(
         )
       );
 
+
     if (
       preparation?.status ===
       'running'
     ) {
-
-      const total =
-        Number(
-          preparation.total || 0
-        );
-
-
-      const completed =
-        Number(
-          preparation.completed || 0
-        );
-
-
-      const failed =
-        Number(
-          preparation.failed || 0
-        );
-
 
       preparationMessage =
         '正在准备需要同步的歌曲……';
@@ -10465,6 +10494,8 @@ async function waitIncomingSyncPreparation(
               : ''
           )
           : '正在下载……';
+
+
       preparationProgress =
         total
           ? Math.round(
@@ -10513,9 +10544,13 @@ async function waitIncomingSyncPreparation(
       preparationDetail =
         '即将保存到手机……';
 
+
       preparationProgress =
         50;
+
     }
+
+
     state.incomingSyncProgress =
       preparationProgress;
 
@@ -10560,15 +10595,6 @@ async function waitIncomingSyncPreparation(
     }
 
 
-    /*
-     * 不管文件来自：
-     *
-     * - Bilibili 后台下载
-     * - Computer Web 上传本地 MP3
-     *
-     * 只有手机真正缺的资源全部齐了，
-     * 才允许手机开始下载。
-     */
     if (
       session.status ===
       'missing-ready'
@@ -10600,11 +10626,6 @@ async function waitIncomingSyncPreparation(
     );
 
   }
-
-
-  throw new Error(
-    '等待同步文件准备超时。'
-  );
 
 }
 
