@@ -13,7 +13,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png?v=30">
   <link rel="icon" href="./assets/icon.svg?v=30" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=68">
+  <link rel="stylesheet" href="./styles.css?v=69">
 </head>
 
 <body>
@@ -155,18 +155,26 @@
 
             <div class="library-toolbar-bottom">
 
-              <div class="offline-summary" id="offlineSummary">
-                本地：正在检查
-              </div>
-
               <div class="library-toolbar-actions">
 
-                <select id="trackSortSelect" class="track-sort-select" aria-label="歌曲排序">
-                  <option value="newest">最新</option>
-                  <option value="oldest">最早</option>
-                  <option value="az">A–Z</option>
-                  <option value="za">Z–A</option>
-                </select>
+                <label class="sort-control">
+
+                  <svg class="sort-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 4v16M5 7l3-3 3 3M16 20V4M13 17l3 3 3-3" />
+                  </svg>
+
+                  <span class="sort-control-label">
+                    排序
+                  </span>
+
+                  <select id="trackSortSelect" class="track-sort-select" aria-label="歌曲排序">
+                    <option value="newest">最新</option>
+                    <option value="oldest">最早</option>
+                    <option value="az">A–Z</option>
+                    <option value="za">Z–A</option>
+                  </select>
+
+                </label>
 
                 <button class="secondary-button compact" type="button" id="playAllButton">
                   播放全部
@@ -284,7 +292,7 @@
 
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/qrcode.min.js"></script>
-  <script src="./app.js?v=68" defer></script>
+  <script src="./app.js?v=69" defer></script>
 </body>
 
 </html>

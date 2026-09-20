@@ -538,6 +538,12 @@ async function refreshOfflineState() {
 
   renderOfflineSummary();
 }
+function localStorageSummary() {
+  return (
+    `${state.offlineTrackIds.size} 首` +
+    ` · ${formatBytes(state.offlineUsage)}`
+  );
+}
 
 function renderOfflineSummary() {
   if (!els.offlineSummary) return;
@@ -2411,8 +2417,8 @@ async function loadLibrary() {
 
   setConnection(
     state.serverConnected
-      ? `Mac 服务已连接 · 本地已保存 ${state.offlineTrackIds.size} 首`
-      : `本地模式 · 已保存 ${state.offlineTrackIds.size} 首`,
+      ? `Mac 服务已连接 · ${localStorageSummary()}`
+      : `本地模式 · ${localStorageSummary()}`,
     true
   );
 
@@ -2496,7 +2502,7 @@ async function checkServerConnection() {
 
 
     setConnection(
-      `Mac 服务已连接 · 本地已保存 ${state.offlineTrackIds.size} 首`,
+      `Mac 服务已连接 · ${localStorageSummary()}`,
       true
     );
 
@@ -2520,10 +2526,9 @@ async function checkServerConnection() {
 
 
       setConnection(
-        `本地模式 · Mac 未连接 · 已保存 ${state.offlineTrackIds.size} 首`,
+        `本地模式 · ${localStorageSummary()}`,
         true
       );
-
 
       render();
 
