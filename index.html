@@ -13,7 +13,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png?v=30">
   <link rel="icon" href="./assets/icon.svg?v=30" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=67">
+  <link rel="stylesheet" href="./styles.css?v=68">
 </head>
 
 <body>
@@ -150,36 +150,33 @@
 
             <label class="search-field">
               <span class="sr-only">搜索歌曲</span>
-
               <input id="searchInput" type="search" placeholder="搜索歌曲">
             </label>
 
+            <div class="library-toolbar-bottom">
 
-            <select id="trackSortSelect" class="track-sort-select" aria-label="歌曲排序">
-              <option value="newest">
-                最新
-              </option>
+              <div class="offline-summary" id="offlineSummary">
+                本地：正在检查
+              </div>
 
-              <option value="oldest">
-                最早
-              </option>
+              <div class="library-toolbar-actions">
 
-              <option value="az">
-                A–Z
-              </option>
+                <select id="trackSortSelect" class="track-sort-select" aria-label="歌曲排序">
+                  <option value="newest">最新</option>
+                  <option value="oldest">最早</option>
+                  <option value="az">A–Z</option>
+                  <option value="za">Z–A</option>
+                </select>
 
-              <option value="za">
-                Z–A
-              </option>
-            </select>
+                <button class="secondary-button compact" type="button" id="playAllButton">
+                  播放全部
+                </button>
 
+              </div>
 
-            <button class="secondary-button compact" type="button" id="playAllButton">
-              播放全部
-            </button>
+            </div>
 
           </div>
-          <div class="offline-summary" id="offlineSummary">本地：正在检查</div>
           <div id="trackList" class="track-list"></div>
         </div>
 
@@ -287,7 +284,7 @@
 
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/qrcode.min.js"></script>
-  <script src="./app.js?v=67" defer></script>
+  <script src="./app.js?v=68" defer></script>
 </body>
 
 </html>

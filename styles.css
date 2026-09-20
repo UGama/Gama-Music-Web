@@ -3301,3 +3301,135 @@ input[type="range"] {
     background: #f3f6fd;
   }
 }
+
+@media (max-width: 719px) {
+
+  .toolbar-row {
+    display: block;
+  }
+
+  .toolbar-row .search-field {
+    width: 100%;
+  }
+
+  .library-toolbar-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 10px;
+
+    margin-top: 13px;
+  }
+
+  .library-toolbar-actions {
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    flex: 0 0 auto;
+  }
+
+
+  /* 本地容量信息 */
+  .library-toolbar-bottom .offline-summary {
+    display: block;
+
+    min-width: 0;
+
+    margin: 0;
+
+    color: #7b8798;
+
+    font-size: 12px;
+    font-weight: 650;
+
+    white-space: nowrap;
+  }
+
+
+  /* 排序变成轻量文字按钮 */
+  .track-sort-select {
+    appearance: none;
+    -webkit-appearance: none;
+
+    width: auto;
+    min-width: 72px;
+    min-height: 36px;
+
+    padding: 0 24px 0 6px;
+
+    border: 0;
+    border-radius: 9px;
+
+    color: #667286;
+
+    background-color: transparent;
+
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23727d8d' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+
+    background-repeat: no-repeat;
+    background-position: right 5px center;
+
+    box-shadow: none;
+
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .track-sort-select:active {
+    background-color: #f1f4f8;
+  }
+
+
+  /* 播放全部稍微收小一点 */
+  #playAllButton {
+    min-height: 38px;
+
+    padding: 0 15px;
+
+    border-radius: 12px;
+
+    font-size: 13px;
+  }
+
+
+  .track-list {
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 719px) {
+
+  .mobile-delete-playlist {
+    display: inline-grid;
+    place-items: center;
+
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+
+    padding: 0;
+
+    border: 1px solid #f0d8d5;
+    border-radius: 12px;
+
+    color: #c84e43;
+
+    background: #fff7f6;
+
+    box-shadow: none;
+  }
+
+  .mobile-delete-playlist svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .mobile-delete-playlist:active {
+    background: #fdecea;
+    transform: scale(0.95);
+  }
+}

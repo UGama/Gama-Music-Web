@@ -3242,17 +3242,27 @@ ${mobilePlayer
     </div>
 
       ${mobilePlayer
-      ? ''
+      ? `
+    <button
+      class="mini-button mobile-delete-playlist"
+      type="button"
+      data-action="delete-playlist"
+      data-playlist-id="${selected.id}"
+      aria-label="删除播放列表"
+    >
+      ${icon('trash')}
+    </button>
+  `
       : `
-      <button
-        class="mini-button mobile-add-song"
-        type="button"
-        data-action="show-add-to-selected"
-        aria-label="添加歌曲"
-      >
-        ${icon('add')}
-      </button>
-    `
+    <button
+      class="mini-button mobile-add-song"
+      type="button"
+      data-action="show-add-to-selected"
+      aria-label="添加歌曲"
+    >
+      ${icon('add')}
+    </button>
+  `
     }
 
     </div>
