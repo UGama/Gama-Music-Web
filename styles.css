@@ -2581,51 +2581,23 @@ input[type="range"] {
 
 /*
  * Chrome 风格下载进度：
- * 直接沿着按钮自己的边框显示。
+ * 直接把按钮自己的边框画成进度条。
+ *
+ * 不使用 mask，兼容 iOS Safari / PWA。
  */
-.mobile-download-button::after {
-  content: "";
-
-  position: absolute;
-  inset: -1px;
-
-  z-index: 1;
-
-  border-radius:
-    calc(var(--radius) + 1px);
-
-  padding: 2.5px;
-
-  pointer-events: none;
+.mobile-download-button.download-progress-active {
+  border:
+    3px solid transparent;
 
   background:
+    linear-gradient(#fff,
+      #fff) padding-box,
+
     conic-gradient(from -90deg,
-      #1a73e8 0 var(--download-progress, 0%),
-      rgba(26, 115, 232, 0.24) var(--download-progress, 0%) 100%);
 
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
+      #0b57d0 0 var(--download-progress, 0%),
 
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-
-  -webkit-mask-composite:
-    xor;
-
-  mask-composite:
-    exclude;
-
-  opacity: 0;
-
-  transition:
-    opacity 160ms ease;
-}
-
-
-.mobile-download-button.download-progress-active::after {
-  opacity: 1;
+      #c7d7f7 var(--download-progress, 0%) 100%) border-box;
 }
 
 

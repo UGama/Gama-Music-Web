@@ -67,6 +67,10 @@ const state = {
 
   incomingSyncCancelled: false,
 
+  incomingSyncAbortController: null,
+  incomingSyncHeartbeatTimer: null,
+  incomingSyncInvite: null,
+
   incomingSyncProgress: 0,
 
   incomingSyncMessage: '',
@@ -5416,6 +5420,8 @@ async function saveTrackToIphone(
       trackId
     );
 
+
+
   const hasAudio =
     Boolean(
       existing?.blob?.size
@@ -7480,7 +7486,7 @@ function openDownloadManager() {
       syncing
         ? async () => {
 
-          stopIncomingSync();
+          await stopIncomingSync();
 
         }
         : null,
@@ -9576,9 +9582,237 @@ async function completeIncomingSync(
 
 }
 
+async function waitForIncomingSyncTrackReady(
+  invite,
+  trackId
+) {
+
+  const STALL_TIMEOUT_MS =
+    10 * 60 * 1000;
+
+
+  let lastProgressAt =
+    Date.now();
+
+
+  let lastSignature =
+    '';
+
+
+  while (true) {
+
+    throwIfIncomingSyncCancelled();
+
+
+    const response =
+      await fetch(
+        `${invite.server}` +
+        `/api/sync/sessions/` +
+        `${encodeURIComponent(
+          invite.sessionId
+        )}`,
+        {
+          cache:
+            'no-store',
+
+          signal:
+            state.incomingSyncAbortController
+              ?.signal
+        }
+      );
+
+
+    const data =
+      await response.json()
+        .catch(
+          () => ({})
+        );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data?.error ||
+        `检查同步状态失败：${response.status}`
+      );
+
+    }
+
+
+    const session =
+      data.session || {};
+
+
+    if (
+      session.status ===
+      'cancelled'
+    ) {
+
+      const error =
+        new Error(
+          '同步已停止'
+        );
+
+      error.code =
+        'SYNC_CANCELLED';
+
+      throw error;
+
+    }
+
+
+    const readyTrackIds =
+      Array.isArray(
+        session.readyTrackIds
+      )
+        ? session.readyTrackIds
+          .map(String)
+        : [];
+
+
+    if (
+      readyTrackIds.includes(
+        String(trackId)
+      )
+    ) {
+
+      return session;
+
+    }
+
+
+    const preparation =
+      session.preparation || {};
+
+
+    const signature =
+      [
+        session.status || '',
+        preparation.status || '',
+        preparation.completed || 0,
+        preparation.failed || 0,
+        session.bufferedTrackCount || 0
+      ].join('|');
+
+
+    if (
+      signature !==
+      lastSignature
+    ) {
+
+      lastSignature =
+        signature;
+
+      lastProgressAt =
+        Date.now();
+
+    }
+
+
+    if (
+      Date.now() -
+      lastProgressAt >=
+      STALL_TIMEOUT_MS
+    ) {
+
+      throw new Error(
+        '等待电脑准备歌曲超时。'
+      );
+
+    }
+
+
+    state.incomingSyncMessage =
+      `电脑准备中 ` +
+      `${preparation.completed || 0}` +
+      ` / ` +
+      `${preparation.total || 0}` +
+      ` · 缓冲 ` +
+      `${session.bufferedTrackCount || 0}` +
+      ` / ` +
+      `${session.bufferLimit || 10}`;
+
+
+    refreshDownloadManagerUi();
+
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          500
+        )
+    );
+
+  }
+
+}
+
+
+async function acknowledgeIncomingSyncTrackReceived(
+  invite,
+  trackId
+) {
+
+  const response =
+    await fetch(
+      `${invite.server}` +
+      `/api/sync/sessions/` +
+      `${encodeURIComponent(
+        invite.sessionId
+      )}` +
+      `/tracks/` +
+      `${encodeURIComponent(
+        trackId
+      )}` +
+      `/received`,
+      {
+        method:
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            clientId:
+              getSyncClientId()
+          }),
+
+        signal:
+          state.incomingSyncAbortController
+            ?.signal
+      }
+    );
+
+
+  const data =
+    await response.json()
+      .catch(
+        () => ({})
+      );
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      data?.error ||
+      `确认歌曲保存失败：${response.status}`
+    );
+
+  }
+
+
+  return data;
+
+}
+
 async function downloadIncomingSyncSnapshot(
   invite,
-  manifest
+  manifest,
+  missing
 ) {
 
   const tracks =
@@ -9591,6 +9825,27 @@ async function downloadIncomingSyncSnapshot(
     Array.isArray(manifest?.playlists)
       ? manifest.playlists
       : [];
+
+  const missingAudioTrackIds =
+    new Set(
+      Array.isArray(
+        missing?.audioTrackIds
+      )
+        ? missing.audioTrackIds
+          .map(String)
+        : []
+    );
+
+
+  const missingCoverTrackIds =
+    new Set(
+      Array.isArray(
+        missing?.coverTrackIds
+      )
+        ? missing.coverTrackIds
+          .map(String)
+        : []
+    );
 
 
 
@@ -9654,11 +9909,11 @@ async function downloadIncomingSyncSnapshot(
 
 
         state.incomingSyncProgress =
-          Math.min(
-            100,
-            50 +
-            Math.round(
-              percent / 2
+          Math.max(
+            0,
+            Math.min(
+              100,
+              percent
             )
           );
 
@@ -9724,7 +9979,28 @@ async function downloadIncomingSyncSnapshot(
         trackId
       );
 
+    const needsPipelineTransfer =
+      missingAudioTrackIds.has(
+        trackId
+      ) ||
+      missingCoverTrackIds.has(
+        trackId
+      );
 
+
+    if (needsPipelineTransfer) {
+
+      showIncomingSyncStage(
+        '正在等待电脑准备……'
+      );
+
+
+      await waitForIncomingSyncTrackReady(
+        invite,
+        trackId
+      );
+
+    }
     /*
      * 手机已经有 MP3 就直接复用，
      * 不重复下载。
@@ -9762,7 +10038,12 @@ async function downloadIncomingSyncSnapshot(
             getSyncClientId()
           )}`,
           {
-            cache: 'no-store'
+            cache:
+              'no-store',
+
+            signal:
+              state.incomingSyncAbortController
+                ?.signal
           }
         );
 
@@ -9830,7 +10111,12 @@ async function downloadIncomingSyncSnapshot(
             getSyncClientId()
           )}`,
           {
-            cache: 'no-store'
+            cache:
+              'no-store',
+
+            signal:
+              state.incomingSyncAbortController
+                ?.signal
           }
         );
 
@@ -9908,6 +10194,27 @@ async function downloadIncomingSyncSnapshot(
       updatedAt:
         new Date().toISOString()
     });
+
+    /*
+ * 只有 IndexedDB 保存成功后
+ * 才告诉 Desktop：
+ *
+ * 这一首已经安全收到，
+ * 可以删掉 Desktop 临时文件。
+ */
+    if (needsPipelineTransfer) {
+
+      showIncomingSyncStage(
+        '正在确认保存……'
+      );
+
+
+      await acknowledgeIncomingSyncTrackReceived(
+        invite,
+        trackId
+      );
+
+    }
 
 
     incomingTracks.push(
@@ -10230,9 +10537,16 @@ async function reportIncomingSyncMissing(
           JSON.stringify({
             ...missing,
 
+            pipelineMode:
+              'stream-v1',
+
             clientId:
               getSyncClientId()
-          })
+          }),
+
+        signal:
+          state.incomingSyncAbortController
+            ?.signal
       }
     );
 
@@ -10302,7 +10616,222 @@ function throwIfIncomingSyncCancelled() {
 }
 
 
-function stopIncomingSync() {
+async function sendIncomingSyncHeartbeat(
+  invite
+) {
+
+  if (
+    !invite ||
+    !state.incomingSyncActive
+  ) {
+
+    return;
+
+  }
+
+
+  const response =
+    await fetch(
+      `${invite.server}` +
+      `/api/sync/sessions/` +
+      `${encodeURIComponent(
+        invite.sessionId
+      )}` +
+      `/heartbeat`,
+      {
+        method:
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            clientId:
+              getSyncClientId()
+          }),
+
+        signal:
+          state.incomingSyncAbortController
+            ?.signal
+      }
+    );
+
+
+  /*
+   * 如果服务器已经取消了，
+   * 后面的正常同步请求也会发现。
+   *
+   * 这里不额外弹窗。
+   */
+  if (
+    !response.ok &&
+    response.status !== 409 &&
+    response.status !== 404
+  ) {
+
+    throw new Error(
+      `同步心跳失败：${response.status}`
+    );
+
+  }
+
+}
+
+
+function stopIncomingSyncHeartbeat() {
+
+  if (
+    state.incomingSyncHeartbeatTimer
+  ) {
+
+    clearInterval(
+      state.incomingSyncHeartbeatTimer
+    );
+
+  }
+
+
+  state.incomingSyncHeartbeatTimer =
+    null;
+
+}
+
+
+function startIncomingSyncHeartbeat(
+  invite
+) {
+
+  stopIncomingSyncHeartbeat();
+
+
+  /*
+   * 先立即发一次。
+   */
+  sendIncomingSyncHeartbeat(
+    invite
+  ).catch(
+    (error) => {
+
+      if (
+        !state.incomingSyncCancelled
+      ) {
+
+        console.warn(
+          '同步心跳失败：',
+          error.message
+        );
+
+      }
+
+    }
+  );
+
+
+  state.incomingSyncHeartbeatTimer =
+    setInterval(
+      () => {
+
+        if (
+          !state.incomingSyncActive
+        ) {
+
+          stopIncomingSyncHeartbeat();
+
+          return;
+
+        }
+
+
+        sendIncomingSyncHeartbeat(
+          invite
+        ).catch(
+          (error) => {
+
+            if (
+              !state.incomingSyncCancelled
+            ) {
+
+              console.warn(
+                '同步心跳失败：',
+                error.message
+              );
+
+            }
+
+          }
+        );
+
+      },
+      10 * 1000
+    );
+
+}
+async function cancelIncomingSyncOnServer(
+  invite
+) {
+
+  if (!invite) {
+    return;
+  }
+
+
+  const response =
+    await fetch(
+      `${invite.server}` +
+      `/api/sync/sessions/` +
+      `${encodeURIComponent(
+        invite.sessionId
+      )}` +
+      `/cancel`,
+      {
+        method:
+          'POST',
+
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+
+        body:
+          JSON.stringify({
+            clientId:
+              getSyncClientId()
+          })
+      }
+    );
+
+
+  /*
+   * 会话已经取消过，
+   * 或退出时服务器刚好清理掉，
+   * 都不用把它当严重错误。
+   */
+  if (
+    !response.ok &&
+    response.status !== 404
+  ) {
+
+    const data =
+      await response.json()
+        .catch(
+          () => ({})
+        );
+
+
+    throw new Error(
+      data?.error ||
+      `停止同步失败：${response.status}`
+    );
+
+  }
+
+}
+
+
+async function stopIncomingSync() {
 
   if (
     !state.incomingSyncActive
@@ -10313,20 +10842,144 @@ function stopIncomingSync() {
   }
 
 
+  const invite =
+    state.incomingSyncInvite ||
+    getIncomingSyncInvite();
+
+
   state.incomingSyncCancelled =
     true;
+
+  stopIncomingSyncHeartbeat();
+  /*
+   * 马上中断手机当前正在接收的
+   * MP3 / 封面请求。
+   *
+   * 没有完整写入 IndexedDB 的内容
+   * 不会被保留下来。
+   */
+  state.incomingSyncAbortController
+    ?.abort();
+
+
+  state.incomingSyncAbortController =
+    null;
+
 
   state.incomingSyncActive =
     false;
 
+
   state.incomingSyncProgress =
     0;
+
 
   state.incomingSyncMessage =
     '同步已停止';
 
 
   refreshDownloadManagerUi();
+
+
+  try {
+
+    await cancelIncomingSyncOnServer(
+      invite
+    );
+
+  } catch (error) {
+
+    console.warn(
+      '通知 Desktop 停止同步失败：',
+      error.message
+    );
+
+  }
+
+}
+
+
+/*
+ * 页面 / PWA 被真正关闭时，
+ * 普通 fetch 可能来不及完成。
+ *
+ * sendBeacon 会更适合这种退出场景。
+ */
+function cancelIncomingSyncOnExit() {
+
+  if (
+    !state.incomingSyncActive
+  ) {
+
+    return;
+
+  }
+
+
+  const invite =
+    state.incomingSyncInvite ||
+    getIncomingSyncInvite();
+
+
+  if (!invite) {
+    return;
+  }
+
+
+  state.incomingSyncCancelled =
+    true;
+
+  stopIncomingSyncHeartbeat();
+  state.incomingSyncAbortController
+    ?.abort();
+
+
+  const cancelUrl =
+    `${invite.server}` +
+    `/api/sync/sessions/` +
+    `${encodeURIComponent(
+      invite.sessionId
+    )}` +
+    `/cancel` +
+    `?clientId=${encodeURIComponent(
+      getSyncClientId()
+    )}`;
+
+
+  try {
+
+    if (
+      navigator.sendBeacon
+    ) {
+
+      navigator.sendBeacon(
+        cancelUrl
+      );
+
+      return;
+
+    }
+
+  } catch {
+    // fallback below
+  }
+
+
+  /*
+   * 不支持 sendBeacon 时的兜底。
+   */
+  fetch(
+    cancelUrl,
+    {
+      method:
+        'POST',
+
+      keepalive:
+        true
+    }
+  ).catch(
+    () => { }
+  );
 
 }
 
@@ -10361,7 +11014,11 @@ async function waitIncomingSyncPreparation(
         )}`,
         {
           cache:
-            'no-store'
+            'no-store',
+
+          signal:
+            state.incomingSyncAbortController
+              ?.signal
         }
       );
 
@@ -10823,13 +11480,25 @@ async function openIncomingSyncPreview() {
             false;
 
 
-          state.incomingSyncActive =
-            true;
+          state.incomingSyncAbortController
+            ?.abort();
+
+
+          state.incomingSyncAbortController =
+            new AbortController();
+
+
+          state.incomingSyncInvite =
+            invite;
+
+
           state.incomingSyncActive =
             true;
 
+
           state.incomingSyncProgress =
             0;
+
 
           state.incomingSyncMessage =
             '正在准备需要同步的歌曲……';
@@ -10858,20 +11527,22 @@ async function openIncomingSyncPreview() {
             '后台运行';
 
           try {
-            const missingReport =
-              await reportIncomingSyncMissing(
-                invite,
-                missing
-              );
-
-            await waitIncomingSyncPreparation(
+            await reportIncomingSyncMissing(
               invite,
-              missingReport
+              missing
             );
+
+
+            startIncomingSyncHeartbeat(
+              invite
+            );
+
+
             const syncResult =
               await downloadIncomingSyncSnapshot(
                 invite,
-                manifest
+                manifest,
+                missing
               );
 
             state.incomingSyncProgress =
@@ -10944,7 +11615,12 @@ async function openIncomingSyncPreview() {
 
             if (
               error?.code ===
-              'SYNC_CANCELLED'
+              'SYNC_CANCELLED' ||
+              (
+                state.incomingSyncCancelled &&
+                error?.name ===
+                'AbortError'
+              )
             ) {
 
               return;
@@ -10958,6 +11634,9 @@ async function openIncomingSyncPreview() {
 
           } finally {
 
+            stopIncomingSyncHeartbeat();
+
+
             state.incomingSyncActive =
               false;
 
@@ -10967,20 +11646,16 @@ async function openIncomingSyncPreview() {
             state.incomingSyncMessage =
               '';
 
+            state.incomingSyncAbortController =
+              null;
+
+            state.incomingSyncInvite =
+              null;
+
 
             refreshDownloadManagerUi();
 
-
-            if (
-              els.modal.dataset.context ===
-              'incoming-sync'
-            ) {
-
-              els.modalPrimaryButton.disabled =
-                false;
-
-            }
-
+            // 下面原来的代码继续
           }
 
         }
@@ -13331,6 +14006,16 @@ async function handleAction(event) {
 }
 
 function bindEvents() {
+  window.addEventListener(
+    'pagehide',
+    cancelIncomingSyncOnExit
+  );
+
+
+  window.addEventListener(
+    'beforeunload',
+    cancelIncomingSyncOnExit
+  );
   els.previewButton.addEventListener('click', previewVideo);
   els.downloadForm.addEventListener('submit', startDownload);
   if (els.favoriteImportForm) {
