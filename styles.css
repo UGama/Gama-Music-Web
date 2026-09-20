@@ -2575,54 +2575,63 @@ input[type="range"] {
 }
 
 .mobile-download-button .mobile-download-ring {
-  position: absolute;
-
-  top: 50%;
-  left: 50%;
-
-  width: 48px;
-  height: 48px;
-
-  z-index: 1;
-
-  pointer-events: none;
-
-  transform:
-    translate(-50%, -50%) rotate(-90deg);
-}
-
-
-.mobile-download-button .mobile-download-ring[hidden] {
   display: none !important;
 }
 
 
-.mobile-download-ring circle {
-  fill: none;
+/*
+ * Chrome 风格下载进度：
+ * 直接沿着按钮自己的边框显示。
+ */
+.mobile-download-button::after {
+  content: "";
 
-  stroke-width: 3.2;
-}
+  position: absolute;
+  inset: -1px;
 
+  z-index: 1;
 
-.mobile-download-ring-track {
-  stroke:
-    rgba(53, 106, 230, 0.32);
-}
+  border-radius:
+    calc(var(--radius) + 1px);
 
+  padding: 2.5px;
 
-.mobile-download-ring-value {
-  stroke:
-    var(--teal-strong);
+  pointer-events: none;
 
-  stroke-linecap:
-    round;
+  background:
+    conic-gradient(from -90deg,
+      #1a73e8 0 var(--download-progress, 0%),
+      rgba(26, 115, 232, 0.24) var(--download-progress, 0%) 100%);
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+
+  -webkit-mask-composite:
+    xor;
+
+  mask-composite:
+    exclude;
+
+  opacity: 0;
 
   transition:
-    stroke-dashoffset 180ms ease;
+    opacity 160ms ease;
 }
+
+
+.mobile-download-button.download-progress-active::after {
+  opacity: 1;
+}
+
 
 .mobile-download-button>svg:not(.mobile-download-ring) {
   position: relative;
+
   z-index: 2;
 }
 

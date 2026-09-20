@@ -7200,30 +7200,25 @@ function refreshDownloadManagerUi() {
 
 
   if (
-    els.mobileDownloadsProgress &&
-    els.mobileDownloadsProgressBar
+    els.mobileDownloadsButton
   ) {
 
-    els.mobileDownloadsProgress.toggleAttribute(
-      'hidden',
-      progressValues.length === 0
-    );
+    const hasProgress =
+      progressValues.length > 0;
 
 
-    const circumference =
-      2 * Math.PI * 17;
+    els.mobileDownloadsButton
+      .classList.toggle(
+        'download-progress-active',
+        hasProgress
+      );
 
 
-    els.mobileDownloadsProgressBar.style
-      .strokeDasharray =
-      `${circumference}`;
-
-
-    els.mobileDownloadsProgressBar.style
-      .strokeDashoffset =
-      `${circumference *
-      (1 - overallProgress / 100)
-      }`;
+    els.mobileDownloadsButton
+      .style.setProperty(
+        '--download-progress',
+        `${overallProgress}%`
+      );
 
   }
 
