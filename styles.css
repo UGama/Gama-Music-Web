@@ -454,6 +454,10 @@ input::placeholder {
       1 / -1;
   }
 
+  .track-sort-select {
+    justify-self: end;
+  }
+
 }
 
 .track-list,

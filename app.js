@@ -7204,8 +7204,10 @@ function refreshDownloadManagerUi() {
     els.mobileDownloadsProgressBar
   ) {
 
-    els.mobileDownloadsProgress.hidden =
-      progressValues.length === 0;
+    els.mobileDownloadsProgress.toggleAttribute(
+      'hidden',
+      progressValues.length === 0
+    );
 
 
     const circumference =
@@ -11002,6 +11004,8 @@ async function openIncomingSyncPreview() {
 
       primaryText:
         '关闭',
+      showCancel:
+        false,
 
       body: `
         <p class="settings-note">
