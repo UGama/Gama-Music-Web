@@ -6,6 +6,7 @@ const SHELL_ASSETS = [
   './index.html',
   './styles.css',
   './app.js',
+  './storage.js',
   './manifest.webmanifest',
   './assets/icon.svg?v=30',
   './assets/icon-192.png?v=30',

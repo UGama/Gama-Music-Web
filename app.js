@@ -1,3 +1,14 @@
+import {
+  getOfflineTrack,
+  putOfflineTrack,
+  deleteOfflineTrack,
+  getOfflineTrackIds,
+  getAllOfflineTracks,
+  cacheLibrary,
+  getCachedLibrary
+} from './storage.js';
+
+
 'use strict';
 const DEFAULT_API_BASE =
   'https://gamas-macbook-pro.tailb567af.ts.net';
@@ -19,12 +30,7 @@ const storageKeys = {
   mobileDownloadFailures: 'gamaMusic.mobileDownloadFailures'
 };
 
-const offlineDb = {
-  name: 'gamaMusic.offline',
-  version: 1,
-  audioStore: 'audio',
-  dataStore: 'data'
-};
+
 
 const state = {
   library: { tracks: [], playlists: [] },
@@ -266,67 +272,6 @@ function applyMobilePlayerMode() {
 
 }
 
-function openOfflineDb() {
-  return new Promise((resolve, reject) => {
-    if (!('indexedDB' in window)) {
-      reject(new Error('这台设备不支持离线歌曲存储。'));
-      return;
-    }
-
-    const request = indexedDB.open(offlineDb.name, offlineDb.version);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(offlineDb.audioStore)) {
-        db.createObjectStore(offlineDb.audioStore, { keyPath: 'trackId' });
-      }
-      if (!db.objectStoreNames.contains(offlineDb.dataStore)) {
-        db.createObjectStore(offlineDb.dataStore, { keyPath: 'key' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('无法打开本地存储。'));
-  });
-}
-
-async function offlineRequest(storeName, mode, operation) {
-  const db = await openOfflineDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, mode);
-    const request = operation(transaction.objectStore(storeName));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('本地存储操作失败。'));
-    transaction.oncomplete = () => db.close();
-    transaction.onabort = () => reject(transaction.error || new Error('本地存储空间不足。'));
-  });
-}
-
-function getOfflineTrack(trackId) {
-  return offlineRequest(offlineDb.audioStore, 'readonly', (store) => store.get(trackId));
-}
-
-function putOfflineTrack(record) {
-  return offlineRequest(offlineDb.audioStore, 'readwrite', (store) => store.put(record));
-}
-
-function deleteOfflineTrack(trackId) {
-  return offlineRequest(offlineDb.audioStore, 'readwrite', (store) => store.delete(trackId));
-}
-
-function getOfflineTrackIds() {
-  return offlineRequest(offlineDb.audioStore, 'readonly', (store) => store.getAllKeys());
-}
-
-function getAllOfflineTracks() {
-  return offlineRequest(
-    offlineDb.audioStore,
-    'readonly',
-    (store) => store.getAll()
-  );
-}
-
-function cacheLibrary(library) {
-  return offlineRequest(offlineDb.dataStore, 'readwrite', (store) => store.put({ key: 'library', value: library }));
-}
 
 function createWebPlaylistId() {
 
@@ -349,10 +294,7 @@ function createWebPlaylistId() {
 
 }
 
-async function getCachedLibrary() {
-  const record = await offlineRequest(offlineDb.dataStore, 'readonly', (store) => store.get('library'));
-  return record?.value || null;
-}
+
 
 function mergeOfflineTracks(library, cachedLibrary) {
 
