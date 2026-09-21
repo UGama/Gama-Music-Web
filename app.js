@@ -6249,11 +6249,6 @@ async function removeTrackFromIphone(trackId) {
 
 
 
-function setMode(mode) {
-  state.mode = mode;
-  localStorage.setItem(storageKeys.mode, mode);
-  renderModeButtons();
-}
 
 function buildDownloadManagerBody() {
 

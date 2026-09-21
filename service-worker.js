@@ -1,11 +1,14 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v72';
+const CACHE_NAME = 'gama-music-shell-v73';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './storage.js',
+  './vendor/jsQR.js',
+  './vendor/qrcode.min.js',
   './state.js',
   './player.js',
   './manifest.webmanifest',
@@ -39,7 +42,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('gama-music-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
@@ -136,15 +139,12 @@ self.addEventListener('fetch', (event) => {
         const copy =
           response.clone();
 
-        caches.open(
-          CACHE_NAME
-        ).then(
-          (cache) =>
-            cache.put(
-              event.request,
-              copy
-            )
-        );
+        if (response.ok) {
+          event.waitUntil(
+            caches.open(CACHE_NAME)
+              .then((cache) => cache.put(event.request, copy))
+          );
+        }
 
         return response;
 
@@ -157,7 +157,7 @@ self.addEventListener('fetch', (event) => {
          * 已缓存的 app.js。
          */
         const cached =
-          await caches.match(
+          await (await caches.open(CACHE_NAME)).match(
             event.request,
             {
               ignoreSearch: true
@@ -173,12 +173,11 @@ self.addEventListener('fetch', (event) => {
          * 页面本身断网时，
          * 回到已经缓存的 Gama Music。
          */
-        return caches.match(
-          './index.html',
-          {
-            ignoreSearch: true
-          }
-        );
+        if (event.request.mode === 'navigate') {
+          return (await caches.open(CACHE_NAME)).match('./index.html');
+        }
+
+        return Response.error();
 
       })
   );
