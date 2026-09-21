@@ -2766,22 +2766,41 @@ function sortedLibraryTracks() {
 }
 
 
-function renderTracks() {
+function visibleLibraryTracks() {
 
   const query =
-    els.searchInput.value
+    String(
+      els.searchInput?.value || ''
+    )
       .trim()
       .toLowerCase();
 
 
   const tracks =
-    sortedLibraryTracks()
-      .filter(
-        (track) =>
-          track.title
-            .toLowerCase()
-            .includes(query)
-      );
+    sortedLibraryTracks();
+
+
+  if (!query) {
+    return tracks;
+  }
+
+
+  return tracks.filter(
+    (track) =>
+      String(
+        track.title || ''
+      )
+        .toLowerCase()
+        .includes(query)
+  );
+
+}
+
+
+function renderTracks() {
+
+  const tracks =
+    visibleLibraryTracks();
 
 
   els.trackList.innerHTML =
@@ -14036,7 +14055,31 @@ function bindEvents() {
   if (els.favoriteImportForm) {
     els.favoriteImportForm.addEventListener('submit', startFavoriteImport);
   }
-  els.searchInput.addEventListener('input', renderTracks);
+  let searchDebounceTimer =
+    null;
+
+
+  els.searchInput.addEventListener(
+    'input',
+    () => {
+
+      window.clearTimeout(
+        searchDebounceTimer
+      );
+
+
+      searchDebounceTimer =
+        window.setTimeout(
+          () => {
+
+            renderTracks();
+
+          },
+          120
+        );
+
+    }
+  );
   els.trackSortSelect?.addEventListener(
     'change',
     () => {
@@ -14075,29 +14118,57 @@ function bindEvents() {
     'click',
     async () => {
 
-      const sorted =
-        sortedLibraryTracks();
+      /*
+       * 使用当前画面真正显示的歌曲：
+       *
+       * 搜索结果
+       * +
+       * 当前排序方式
+       */
+      const visibleTracks =
+        visibleLibraryTracks();
 
 
-      const first =
-        state.serverConnected
-          ? sorted[0]
-          : sorted.find(
+      /*
+       * 没连 Mac 时，
+       * 只能播放当前设备已经保存的歌曲。
+       */
+      const playableIds =
+        visibleTracks
+          .filter(
             (track) =>
+              state.serverConnected ||
               state.offlineTrackIds.has(
                 track.id
               )
+          )
+          .map(
+            (track) =>
+              track.id
           );
 
 
-      if (first) {
+      if (!playableIds.length) {
 
-        await playTrack(
-          first.id,
-          'library'
+        setStatus(
+          '当前结果中没有可播放的歌曲。',
+          'warning'
         );
 
+        return;
       }
+
+
+      /*
+       * 把整个当前结果作为播放队列传进去。
+       *
+       * 这样下一首 / 上一首
+       * 也会继续留在当前搜索结果里。
+       */
+      await playTrack(
+        playableIds[0],
+        playableIds
+      );
 
     }
   );
