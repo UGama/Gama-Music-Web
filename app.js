@@ -2,88 +2,30 @@ import {
   getOfflineTrack,
   putOfflineTrack,
   deleteOfflineTrack,
-  getOfflineTrackIds,
   getAllOfflineTracks,
   cacheLibrary,
   getCachedLibrary
 } from './storage.js';
+import {
+  state,
+  storageKeys
+} from './state.js';
 
+import {
+  initPlayer,
+  playTrack,
+  renderPlayer,
+  renderModeButtons,
+  setMode
+} from './player.js';
 
-'use strict';
 const DEFAULT_API_BASE =
   'https://gamas-macbook-pro.tailb567af.ts.net';
 
-const storageKeys = {
-  apiBase: 'gamaMusic.apiBase',
-  relayAccessKey: 'gamaMusic.relayAccessKey',
-  accessToken: 'gamaMusic.accessToken',
-  mode: 'gamaMusic.mode',
-  selectedPlaylist: 'gamaMusic.selectedPlaylist',
-  trackSort: 'gamaMusic.trackSort',
-  sleepTimerEndAt: 'gamaMusic.sleepTimerEndAt',
-  syncClientId: 'gamaMusic.syncClientId',
-  downloadJobId: 'gamaMusic.downloadJobId',
-  favoriteJobId: 'gamaMusic.favoriteJobId',
-  mobileDownloadQueue: 'gamaMusic.mobileDownloadQueue',
-  mobileDownloadPaused: 'gamaMusic.mobileDownloadPaused',
-  mobileDownloadHistory: 'gamaMusic.mobileDownloadHistory',
-  mobileDownloadFailures: 'gamaMusic.mobileDownloadFailures'
-};
 
 
 
-const state = {
-  library: { tracks: [], playlists: [] },
-  selectedPlaylistId: localStorage.getItem(storageKeys.selectedPlaylist) || null,
-  currentTrackId: null,
-  queue: [],
-  activeView: 'library',
-  mobilePlaylistDetailOpen: false,
-  mode: localStorage.getItem(storageKeys.mode) || 'loop',
-  trackSort:
-    localStorage.getItem(
-      storageKeys.trackSort
-    ) || 'newest',
-  preview: null,
-  previewUrl: '',
-  jobTimer: null,
-  favoriteJobTimer: null,
-  isSeeking: false,
-  serverConnected: false,
 
-  sleepTimerEndAt:
-    Number(
-      localStorage.getItem(
-        storageKeys.sleepTimerEndAt
-      ) || 0
-    ),
-
-  sleepTimerTimer: null,
-
-  serverCheckTimer: null,
-  serverCheckBusy: false,
-
-  offlineTrackIds: new Set(),
-  offlineCoverUrls: new Map(),
-  offlineUsage: 0,
-  playlistSaveJobs: new Map(),
-  mobileDownloadResumeBusy: false,
-  mobileDownloadCompleteTimer: null,
-  incomingSyncActive: false,
-
-  incomingSyncCancelled: false,
-
-  incomingSyncAbortController: null,
-  incomingSyncHeartbeatTimer: null,
-  incomingSyncInvite: null,
-
-  incomingSyncProgress: 0,
-
-  incomingSyncMessage: '',
-  playerCoverUrl: null,
-  playlistHeaderScrollHandler: null,
-  activeObjectUrl: ''
-};
 
 let qrScannerStream = null;
 let qrScannerFrame = null;
@@ -6305,275 +6247,7 @@ async function removeTrackFromIphone(trackId) {
   render();
 }
 
-async function playTrack(trackId, context = 'library') {
-  const track = state.library.tracks.find((item) => item.id === trackId);
-  if (!track) return;
 
-  let source = '';
-  if (state.offlineTrackIds.has(trackId)) {
-    const saved = await getOfflineTrack(trackId);
-    if (saved?.blob) source = URL.createObjectURL(saved.blob);
-  }
-  if (!source) {
-    if (!state.serverConnected) throw new Error('这首歌还没有保存到本地，请连接 Mac 后保存。');
-    source = mediaUrl(track);
-  }
-
-  if (state.activeObjectUrl) URL.revokeObjectURL(state.activeObjectUrl);
-  state.activeObjectUrl = source.startsWith('blob:') ? source : '';
-  state.queue = queueForContext(context, trackId);
-  if (!state.queue.includes(trackId)) state.queue.unshift(trackId);
-  state.currentTrackId = trackId;
-  els.audio.src = source;
-  els.audio.load();
-
-  try {
-    await els.audio.play();
-    renderPlayer();
-  } catch {
-    renderPlayer();
-  }
-}
-
-async function togglePlayPause() {
-  if (!state.currentTrackId && state.library.tracks[0]) {
-    await playTrack(state.library.tracks[0].id);
-    return;
-  }
-
-  if (els.audio.paused) {
-    await els.audio.play();
-  } else {
-    els.audio.pause();
-  }
-  renderPlayer();
-}
-
-function currentTrack() {
-  return state.library.tracks.find((track) => track.id === state.currentTrackId) || null;
-}
-
-function nextTrackId(direction = 1) {
-  if (!state.queue.length) state.queue = state.library.tracks.map((track) => track.id);
-  if (!state.queue.length) return null;
-
-  if (state.mode === 'shuffle') {
-    if (state.queue.length === 1) return state.queue[0];
-    const candidates = state.queue.filter((id) => id !== state.currentTrackId);
-    return candidates[Math.floor(Math.random() * candidates.length)];
-  }
-
-  const index = Math.max(0, state.queue.indexOf(state.currentTrackId));
-  const nextIndex = index + direction;
-  if (nextIndex >= 0 && nextIndex < state.queue.length) return state.queue[nextIndex];
-  return state.queue[(nextIndex + state.queue.length) % state.queue.length];
-}
-
-async function goNext() {
-  const nextId = nextTrackId(1);
-  if (nextId) await playTrack(nextId, state.queue);
-}
-
-async function goPrev() {
-  const prevId = nextTrackId(-1);
-  if (prevId) await playTrack(prevId, state.queue);
-}
-
-async function handleEnded() {
-  if (state.mode === 'one') {
-    els.audio.currentTime = 0;
-    await els.audio.play();
-    return;
-  }
-  await goNext();
-}
-
-function updateActiveTrackCards() {
-  document
-    .querySelectorAll('.track-card[data-track-id]')
-    .forEach((card) => {
-      card.classList.toggle(
-        'active',
-        card.dataset.trackId === state.currentTrackId
-      );
-    });
-}
-
-function renderPlayer() {
-  if (navigator.mediaSession) {
-    navigator.mediaSession.playbackState = state.currentTrackId
-      ? (els.audio.paused ? 'paused' : 'playing')
-      : 'none';
-  }
-  const track =
-    currentTrack();
-
-  const paused =
-    els.audio.paused;
-
-
-  els.player.classList.toggle(
-    'playing',
-    !paused &&
-    Boolean(track)
-  );
-
-
-  els.nowTitle.textContent =
-    track
-      ? track.title
-      : '等待播放';
-
-
-  els.nowMeta.textContent =
-    track
-      ? (
-        [
-          track.source?.id,
-          track.uploader
-        ]
-          .filter(Boolean)
-          .join(' · ') ||
-        'Gama Music'
-      )
-      : '选择一首歌曲';
-
-
-  els.playPauseIcon.setAttribute(
-    'd',
-    paused
-      ? 'M8 5v14l11-7-11-7Z'
-      : 'M7 5h4v14H7V5Zm6 0h4v14h-4V5Z'
-  );
-
-
-  /*
-   * 播放器左侧封面
-   */
-  const coverUrl =
-    track
-      ? trackCoverUrl(track)
-      : '';
-
-
-  /*
- * 只有封面真的发生变化，
- * 才重新创建播放器封面。
- */
-  if (
-    coverUrl !==
-    state.playerCoverUrl
-  ) {
-    state.playerCoverUrl =
-      coverUrl;
-
-    if (coverUrl) {
-
-      /*
-       * 有真实歌曲封面
-       */
-      els.playerArt.innerHTML = `
-    <img
-      src="${escapeHtml(coverUrl)}"
-      alt=""
-    >
-  `;
-
-      els.playerArt.classList.remove(
-        'default',
-        'idle'
-      );
-
-    } else if (track) {
-
-      /*
-       * 有歌曲，但这首歌没有真实封面
-       */
-      els.playerArt.innerHTML = `
-    <span class="player-cover-symbol">
-      ♪
-    </span>
-  `;
-
-      els.playerArt.classList.add(
-        'default'
-      );
-
-      els.playerArt.classList.remove(
-        'idle'
-      );
-
-    } else {
-
-      /*
-       * 完全还没有开始播放：
-       * 使用原来 Gama Music 的三色柱图标
-       */
-      els.playerArt.innerHTML = `
-    <span class="idle-bar"></span>
-    <span class="idle-bar"></span>
-    <span class="idle-bar"></span>
-  `;
-
-      els.playerArt.classList.remove(
-        'default'
-      );
-
-      els.playerArt.classList.add(
-        'idle'
-      );
-    }
-  }
-
-
-  /*
-   * iPhone 锁屏 / 控制中心封面
-   */
-  if (
-    'mediaSession' in navigator &&
-    track
-  ) {
-    const artworkUrl =
-      coverUrl ||
-      './assets/icon-512.png';
-
-    navigator.mediaSession.metadata =
-      new MediaMetadata({
-        title:
-          track.title,
-
-        artist:
-          track.uploader ||
-          'Gama Music',
-
-        album:
-          'Gama Music',
-
-        artwork: [
-          {
-            src:
-              artworkUrl
-          }
-        ]
-      });
-  }
-  updateActiveTrackCards();
-}
-
-function updateProgress() {
-  if (state.isSeeking) return;
-  const duration = els.audio.duration || 0;
-  const current = els.audio.currentTime || 0;
-  els.currentTime.textContent = formatTime(current);
-  els.durationTime.textContent = formatTime(duration);
-  els.progressInput.value = duration ? Math.round((current / duration) * 1000) : 0;
-}
-
-function renderModeButtons() {
-  document.querySelectorAll('[data-mode]').forEach((button) => {
-    button.classList.toggle('active', button.dataset.mode === state.mode);
-  });
-}
 
 function setMode(mode) {
   state.mode = mode;
@@ -14133,72 +13807,17 @@ function bindEvents() {
     handleAction(event).catch((error) => setStatus(error.message, 'warning'));
   });
 
-  document.querySelectorAll('[data-mode]').forEach((button) => {
-    button.addEventListener('click', () => setMode(button.dataset.mode));
-  });
 
-  els.playPauseButton.addEventListener('click', () => {
-    togglePlayPause().catch((error) => setStatus(error.message, 'warning'));
-  });
-  els.nextButton.addEventListener('click', () => {
-    goNext().catch((error) => setStatus(error.message, 'warning'));
-  });
-  els.prevButton.addEventListener('click', () => {
-    goPrev().catch((error) => setStatus(error.message, 'warning'));
-  });
-
-  els.audio.addEventListener('play', renderPlayer);
-  els.audio.addEventListener('playing', configureMediaSessionActions);
-  els.audio.addEventListener('pause', renderPlayer);
-  els.audio.addEventListener('timeupdate', updateProgress);
-  els.audio.addEventListener('loadedmetadata', updateProgress);
-  els.audio.addEventListener('ended', () => {
-    handleEnded().catch((error) => setStatus(error.message, 'warning'));
-  });
-
-  els.progressInput.addEventListener('input', () => {
-    state.isSeeking = true;
-    const duration = els.audio.duration || 0;
-    const nextTime = duration * (Number(els.progressInput.value) / 1000);
-    els.currentTime.textContent = formatTime(nextTime);
-  });
-  els.progressInput.addEventListener('change', () => {
-    const duration = els.audio.duration || 0;
-    els.audio.currentTime = duration * (Number(els.progressInput.value) / 1000);
-    state.isSeeking = false;
-    updateProgress();
-  });
 
   els.modalCloseButton.addEventListener('click', closeModal);
   els.modal.addEventListener('click', (event) => {
     if (event.target === els.modal) closeModal();
   });
 
-  configureMediaSessionActions();
+  
 }
 
-function configureMediaSessionActions() {
-  if (!navigator.mediaSession?.setActionHandler) return;
-  const run = (action) => () => {
-    Promise.resolve().then(action).catch((error) => setStatus(error.message, 'warning'));
-  };
-  const handlers = {
-    seekbackward: null,
-    seekforward: null,
-    play: run(() => els.audio.play()),
-    pause: run(() => els.audio.pause()),
-    previoustrack: run(() => goPrev()),
-    nexttrack: run(() => goNext())
-  };
-  for (const [action, handler] of Object.entries(handlers)) {
-    try {
-      navigator.mediaSession.setActionHandler(action, handler);
-    } catch (error) {
-      // An unsupported action must not prevent the other controls from registering.
-      console.warn(`Media Session action unavailable: ${action}`, error);
-    }
-  }
-}
+
 
 async function registerServiceWorker() {
 
@@ -14317,6 +13936,15 @@ async function registerServiceWorker() {
 document.addEventListener('DOMContentLoaded', async () => {
   initElements();
 
+  initPlayer({
+    els,
+    mediaUrl,
+    trackCoverUrl,
+    formatTime,
+    escapeHtml,
+    sortedLibraryTracks,
+    setStatus
+  });
   applyMobilePlayerMode();
 
   bindEvents();

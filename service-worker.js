@@ -1,12 +1,13 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v70';
+const CACHE_NAME = 'gama-music-shell-v72';
 const SHELL_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './storage.js',
+  './state.js',
+  './player.js',
   './manifest.webmanifest',
   './assets/icon.svg?v=30',
   './assets/icon-192.png?v=30',
@@ -25,6 +26,7 @@ const SHELL_ASSETS = [
   './assets/playlist/tiger.svg',
   './assets/playlist/lion.svg'
 ];
+
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
