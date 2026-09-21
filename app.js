@@ -19,6 +19,21 @@ import {
   setMode
 } from './player.js';
 
+import {
+  visibleLibraryTracks
+} from './library.js';
+
+import {
+  getSelectedPlaylist,
+  selectPlaylist,
+  createLocalPlaylist,
+  createWebPlaylistId,
+  renamePlaylist,
+  deletePlaylist,
+  addTrackToPlaylist,
+  removeTrackFromPlaylist
+} from './playlists.js';
+
 const DEFAULT_API_BASE =
   'https://gamas-macbook-pro.tailb567af.ts.net';
 
@@ -210,28 +225,6 @@ function applyMobilePlayerMode() {
 
   document.body.classList.add(
     'mobile-player-mode'
-  );
-
-}
-
-
-function createWebPlaylistId() {
-
-  const randomId =
-    (
-      globalThis.crypto &&
-      typeof globalThis.crypto.randomUUID ===
-      'function'
-    )
-      ? globalThis.crypto.randomUUID()
-
-      : `${Date.now()}-${Math.random()
-        .toString(16)
-        .slice(2)}`;
-
-
-  return (
-    `web-playlist-${randomId}`
   );
 
 }
@@ -2564,127 +2557,17 @@ function renderEmptyConnection(message) {
   els.playlistDetail.innerHTML = '';
 }
 
-function sortedLibraryTracks() {
-
-  const tracks =
-    [...state.library.tracks];
 
 
-  if (
-    state.trackSort ===
-    'oldest'
-  ) {
 
-    tracks.sort(
-      (a, b) =>
-        new Date(
-          a.createdAt || 0
-        ) -
-        new Date(
-          b.createdAt || 0
-        )
-    );
-
-  } else if (
-    state.trackSort ===
-    'az'
-  ) {
-
-    tracks.sort(
-      (a, b) =>
-        String(
-          a.title || ''
-        ).localeCompare(
-          String(
-            b.title || ''
-          ),
-          'zh-CN',
-          {
-            sensitivity:
-              'base'
-          }
-        )
-    );
-
-  } else if (
-    state.trackSort ===
-    'za'
-  ) {
-
-    tracks.sort(
-      (a, b) =>
-        String(
-          b.title || ''
-        ).localeCompare(
-          String(
-            a.title || ''
-          ),
-          'zh-CN',
-          {
-            sensitivity:
-              'base'
-          }
-        )
-    );
-
-  } else {
-
-    /*
-     * 默认：最新添加。
-     */
-    tracks.sort(
-      (a, b) =>
-        new Date(
-          b.createdAt || 0
-        ) -
-        new Date(
-          a.createdAt || 0
-        )
-    );
-
-  }
-
-
-  return tracks;
-
-}
-
-
-function visibleLibraryTracks() {
-
-  const query =
-    String(
-      els.searchInput?.value || ''
-    )
-      .trim()
-      .toLowerCase();
-
-
-  const tracks =
-    sortedLibraryTracks();
-
-
-  if (!query) {
-    return tracks;
-  }
-
-
-  return tracks.filter(
-    (track) =>
-      String(
-        track.title || ''
-      )
-        .toLowerCase()
-        .includes(query)
-  );
-
-}
 
 
 function renderTracks() {
 
   const tracks =
-    visibleLibraryTracks();
+    visibleLibraryTracks(
+      els.searchInput.value
+    );
 
 
   els.trackList.innerHTML =
@@ -2695,7 +2578,6 @@ function renderTracks() {
           'library'
       }
     );
-
 }
 
 function renderTrackCards(
@@ -3283,9 +3165,6 @@ ${mobilePlayer
   bindMobilePlaylistHeaderWatcher();
 }
 
-function getSelectedPlaylist() {
-  return state.library.playlists.find((playlist) => playlist.id === state.selectedPlaylistId) || null;
-}
 
 function setActiveView(view) {
   state.activeView = view;
@@ -5059,30 +4938,7 @@ function pollFavoriteJob(jobId) {
   }, 1200);
 }
 
-function queueForContext(context, trackId) {
-  const playable = (ids) => ids.filter((id) => {
-    const exists = state.library.tracks.some((track) => track.id === id);
-    return exists && (state.serverConnected || state.offlineTrackIds.has(id));
-  });
 
-  if (Array.isArray(context)) {
-    const ids = playable(context);
-    return ids.length ? ids : [trackId];
-  }
-
-  if (context && context !== 'library') {
-    const playlist = state.library.playlists.find((item) => item.id === context);
-    const ids = playlist ? playable(playlist.trackIds) : [];
-    return ids.length ? ids : [trackId];
-  }
-  return playable(
-    sortedLibraryTracks()
-      .map(
-        (track) =>
-          track.id
-      )
-  );
-}
 
 async function fetchBlobWithProgress(url, onProgress) {
   const response = await fetch(url);
@@ -12959,20 +12815,6 @@ function openSettings() {
     );
 }
 
-function createLocalId(prefix) {
-
-  const randomId =
-    (
-      globalThis.crypto &&
-      typeof globalThis.crypto.randomUUID === 'function'
-    )
-      ? globalThis.crypto.randomUUID()
-      : `${Date.now()}-${Math.random()
-        .toString(16)
-        .slice(2)}`;
-
-  return `${prefix}-${randomId}`;
-}
 
 
 async function saveLocalLibrary() {
@@ -13010,51 +12852,17 @@ function openPlaylistPicker(trackId) {
       onSave:
         async (name) => {
 
-          const now =
-            new Date().toISOString();
+          const playlist =
+            createLocalPlaylist(
+              name,
+              [trackId]
+            );
 
-
-          const playlist = {
-
-            id:
-              createLocalId(
-                'local-playlist'
-              ),
-
-            name,
-
-            trackIds: [
-              trackId
-            ],
-
-            localOnly:
-              true,
-
-            createdAt:
-              now,
-
-            updatedAt:
-              now
-          };
-
-
-          state.library.playlists.push(
-            playlist
-          );
-
-
-          state.selectedPlaylistId =
-            playlist.id;
-
-
-          localStorage.setItem(
-            storageKeys.selectedPlaylist,
-            playlist.id
-          );
-
+          if (!playlist) {
+            return;
+          }
 
           await saveLocalLibrary();
-
         }
 
     });
@@ -13112,44 +12920,17 @@ function openPlaylistPicker(trackId) {
 
           async () => {
 
-            const playlist =
-              state.library.playlists.find(
-                (item) =>
-                  item.id ===
-                  button.dataset.pickerPlaylist
-              );
+            const playlistId =
+              button.dataset.pickerPlaylist;
 
-
-            if (!playlist) {
-              return;
-            }
-
-
-            if (
-              !playlist.trackIds.includes(
-                trackId
-              )
-            ) {
-
-              playlist.trackIds.push(
-                trackId
-              );
-
-              playlist.updatedAt =
-                new Date().toISOString();
-
-            }
-
-
-            state.selectedPlaylistId =
-              playlist.id;
-
-
-            localStorage.setItem(
-              storageKeys.selectedPlaylist,
-              playlist.id
+            addTrackToPlaylist(
+              playlistId,
+              trackId
             );
 
+            selectPlaylist(
+              playlistId
+            );
 
             await saveLocalLibrary();
 
@@ -13164,70 +12945,33 @@ function openPlaylistPicker(trackId) {
 }
 
 
-async function createPlaylist(event) {
-
+async function createPlaylist(
+  event
+) {
   event.preventDefault();
-
 
   const name =
     els.playlistNameInput
       .value
       .trim();
 
-
   if (!name) {
     return;
   }
 
+  const playlist =
+    createLocalPlaylist(
+      name
+    );
 
-  const now =
-    new Date().toISOString();
-
-
-  const playlist = {
-
-    id:
-      createLocalId(
-        'local-playlist'
-      ),
-
-    name,
-
-    trackIds:
-      [],
-
-    localOnly:
-      true,
-
-    createdAt:
-      now,
-
-    updatedAt:
-      now
-  };
-
-
-  state.library.playlists.push(
-    playlist
-  );
-
+  if (!playlist) {
+    return;
+  }
 
   els.playlistNameInput.value =
     '';
 
-
-  state.selectedPlaylistId =
-    playlist.id;
-
-
-  localStorage.setItem(
-    storageKeys.selectedPlaylist,
-    playlist.id
-  );
-
-
   await saveLocalLibrary();
-
 }
 
 async function handleAction(event) {
@@ -13456,14 +13200,13 @@ async function handleAction(event) {
   }
 
   if (action === 'select-playlist') {
-    state.selectedPlaylistId = playlistId;
 
-    state.mobilePlaylistDetailOpen = true;
-
-    localStorage.setItem(
-      storageKeys.selectedPlaylist,
+    selectPlaylist(
       playlistId
     );
+
+    state.mobilePlaylistDetailOpen =
+      true;
 
     renderPlaylists();
   }
@@ -13512,11 +13255,10 @@ async function handleAction(event) {
       onSave:
         async (name) => {
 
-          playlist.name =
-            name;
-
-          playlist.updatedAt =
-            new Date().toISOString();
+          renamePlaylist(
+            playlistId,
+            name
+          );
 
           await saveLocalLibrary();
 
@@ -13536,116 +13278,91 @@ async function handleAction(event) {
       return;
     }
 
-
-    state.library.playlists =
-      state.library.playlists.filter(
-        (playlist) =>
-          playlist.id !== playlistId
-      );
-
-
-    if (
-      state.selectedPlaylistId ===
+    deletePlaylist(
       playlistId
-    ) {
-
-      state.selectedPlaylistId =
-        state.library.playlists[0]?.id ||
-        null;
-
-
-      if (
-        state.selectedPlaylistId
-      ) {
-
-        localStorage.setItem(
-          storageKeys.selectedPlaylist,
-          state.selectedPlaylistId
-        );
-
-      } else {
-
-        localStorage.removeItem(
-          storageKeys.selectedPlaylist
-        );
-
-      }
-
-    }
-
+    );
 
     state.mobilePlaylistDetailOpen =
       false;
 
-
     await saveLocalLibrary();
-
   }
 
-  if (action === 'remove-from-playlist') {
 
-    const playlist =
-      state.library.playlists.find(
-        (item) =>
-          item.id === playlistId
-      );
-
-
-    if (!playlist) {
-      return;
-    }
+  state.library.playlists =
+    state.library.playlists.filter(
+      (playlist) =>
+        playlist.id !== playlistId
+    );
 
 
-    playlist.trackIds =
-      playlist.trackIds.filter(
-        (id) =>
-          id !== trackId
-      );
+  if (
+    state.selectedPlaylistId ===
+    playlistId
+  ) {
 
-
-    playlist.updatedAt =
-      new Date().toISOString();
-
-
-    await saveLocalLibrary();
-
-  }
-
-  if (action === 'show-add-to-selected') {
-    $('#addableTracks')?.classList.toggle('hidden');
-  }
-
-  if (action === 'add-track-to-selected') {
-
-    const playlist =
-      getSelectedPlaylist();
-
-
-    if (!playlist) {
-      return;
-    }
+    state.selectedPlaylistId =
+      state.library.playlists[0]?.id ||
+      null;
 
 
     if (
-      !playlist.trackIds.includes(
-        trackId
-      )
+      state.selectedPlaylistId
     ) {
 
-      playlist.trackIds.push(
-        trackId
+      localStorage.setItem(
+        storageKeys.selectedPlaylist,
+        state.selectedPlaylistId
       );
 
+    } else {
 
-      playlist.updatedAt =
-        new Date().toISOString();
+      localStorage.removeItem(
+        storageKeys.selectedPlaylist
+      );
 
     }
 
-
-    await saveLocalLibrary();
-
   }
+
+
+  state.mobilePlaylistDetailOpen =
+    false;
+
+
+  await saveLocalLibrary();
+
+}
+
+if (action === 'remove-from-playlist') {
+
+  removeTrackFromPlaylist(
+    playlistId,
+    trackId
+  );
+
+  await saveLocalLibrary();
+}
+
+if (action === 'show-add-to-selected') {
+  $('#addableTracks')?.classList.toggle('hidden');
+}
+
+if (action === 'add-track-to-selected') {
+
+  const playlist =
+    getSelectedPlaylist();
+
+  if (!playlist) {
+    return;
+  }
+
+  addTrackToPlaylist(
+    playlist.id,
+    trackId
+  );
+
+  await saveLocalLibrary();
 }
 
 function bindEvents() {
@@ -13735,7 +13452,9 @@ function bindEvents() {
        * 当前排序方式
        */
       const visibleTracks =
-        visibleLibraryTracks();
+        visibleLibraryTracks(
+          els.searchInput.value
+        );
 
 
       /*
@@ -13807,7 +13526,7 @@ function bindEvents() {
     if (event.target === els.modal) closeModal();
   });
 
-  
+
 }
 
 
@@ -13935,7 +13654,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     trackCoverUrl,
     formatTime,
     escapeHtml,
-    sortedLibraryTracks,
     setStatus
   });
   applyMobilePlayerMode();

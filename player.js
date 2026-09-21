@@ -6,7 +6,9 @@ import {
 import {
   getOfflineTrack
 } from './storage.js';
-
+import {
+  sortedLibraryTracks
+} from './library.js';
 
 let els = null;
 
@@ -14,7 +16,7 @@ let getMediaUrl = null;
 let getTrackCoverUrl = null;
 let formatTimeValue = null;
 let escapeHtmlValue = null;
-let getSortedLibraryTracks = null;
+
 let showStatus = null;
 
 
@@ -38,9 +40,6 @@ export function initPlayer(options) {
 
   escapeHtmlValue =
     options.escapeHtml;
-
-  getSortedLibraryTracks =
-    options.sortedLibraryTracks;
 
   showStatus =
     options.setStatus;
@@ -133,7 +132,7 @@ function queueForContext(
 
 
   return playable(
-    getSortedLibraryTracks()
+    sortedLibraryTracks()
       .map(
         (track) =>
           track.id
@@ -388,10 +387,10 @@ function nextTrackId(
 
     return (
       candidates[
-        Math.floor(
-          Math.random() *
-          candidates.length
-        )
+      Math.floor(
+        Math.random() *
+        candidates.length
+      )
       ]
     );
   }
@@ -419,7 +418,7 @@ function nextTrackId(
 
     return (
       state.queue[
-        nextIndex
+      nextIndex
       ]
     );
   }
@@ -427,11 +426,11 @@ function nextTrackId(
 
   return (
     state.queue[
-      (
-        nextIndex +
-        state.queue.length
-      ) %
+    (
+      nextIndex +
       state.queue.length
+    ) %
+    state.queue.length
     ]
   );
 }
@@ -606,8 +605,8 @@ export function renderPlayer() {
       els.playerArt.innerHTML = `
         <img
           src="${escapeHtmlValue(
-            coverUrl
-          )}"
+        coverUrl
+      )}"
           alt=""
         >
       `;

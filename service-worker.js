@@ -9,6 +9,8 @@ const SHELL_ASSETS = [
   './app.js',
   './state.js',
   './player.js',
+  './library.js',
+  './playlists.js',
   './manifest.webmanifest',
   './assets/icon.svg?v=30',
   './assets/icon-192.png?v=30',
