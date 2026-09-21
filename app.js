@@ -13289,37 +13289,43 @@ async function handleAction(event) {
   }
 
 
-}
-if (action === 'remove-from-playlist') {
+  if (action === 'remove-from-playlist') {
 
-  removeTrackFromPlaylist(
-    playlistId,
-    trackId
-  );
+    removeTrackFromPlaylist(
+      playlistId,
+      trackId
+    );
 
-  await saveLocalLibrary();
-}
-
-if (action === 'show-add-to-selected') {
-  $('#addableTracks')?.classList.toggle('hidden');
-}
-
-if (action === 'add-track-to-selected') {
-
-  const playlist =
-    getSelectedPlaylist();
-
-  if (!playlist) {
-    return;
+    await saveLocalLibrary();
   }
 
-  addTrackToPlaylist(
-    playlist.id,
-    trackId
-  );
 
-  await saveLocalLibrary();
+  if (action === 'show-add-to-selected') {
+    $('#addableTracks')?.classList.toggle(
+      'hidden'
+    );
+  }
+
+
+  if (action === 'add-track-to-selected') {
+
+    const playlist =
+      getSelectedPlaylist();
+
+    if (!playlist) {
+      return;
+    }
+
+    addTrackToPlaylist(
+      playlist.id,
+      trackId
+    );
+
+    await saveLocalLibrary();
+  }
+
 }
+
 
 function bindEvents() {
   window.addEventListener(
