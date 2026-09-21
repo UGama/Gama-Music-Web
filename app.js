@@ -13289,51 +13289,7 @@ async function handleAction(event) {
   }
 
 
-  state.library.playlists =
-    state.library.playlists.filter(
-      (playlist) =>
-        playlist.id !== playlistId
-    );
-
-
-  if (
-    state.selectedPlaylistId ===
-    playlistId
-  ) {
-
-    state.selectedPlaylistId =
-      state.library.playlists[0]?.id ||
-      null;
-
-
-    if (
-      state.selectedPlaylistId
-    ) {
-
-      localStorage.setItem(
-        storageKeys.selectedPlaylist,
-        state.selectedPlaylistId
-      );
-
-    } else {
-
-      localStorage.removeItem(
-        storageKeys.selectedPlaylist
-      );
-
-    }
-
-  }
-
-
-  state.mobilePlaylistDetailOpen =
-    false;
-
-
-  await saveLocalLibrary();
-
 }
-
 if (action === 'remove-from-playlist') {
 
   removeTrackFromPlaylist(
