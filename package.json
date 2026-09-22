@@ -1,0 +1,16 @@
+{
+  "name": "gama-music-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.cjs",
+    "test": "npm run check && node --experimental-vm-modules scripts/smoke.cjs"
+  },
+  "devDependencies": {
+    "acorn": "8.18.0",
+    "eslint-scope": "8.4.0",
+    "fake-indexeddb": "6.2.5",
+    "jsdom": "27.0.1"
+  }
+}

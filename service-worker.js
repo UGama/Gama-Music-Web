@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v76';
+const CACHE_NAME = 'gama-music-shell-v77';
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,21 @@ const SHELL_ASSETS = [
   './playlists.js',
   './playlist-view.js',
   './utils.js',
+  './api.js',
+  './backup.js',
+  './bilibili.js',
+  './download-store.js',
+  './library-service.js',
+  './mobile-downloads.js',
+  './pwa.js',
+  './qr-scanner.js',
+  './settings.js',
+  './sleep-timer.js',
+  './sync.js',
+  './transfer.js',
+  './ui.js',
+  './vendor/jsQR.js',
+  './vendor/qrcode.min.js',
   './manifest.webmanifest',
   './assets/icon.svg?v=30',
   './assets/icon-192.png?v=30',
@@ -54,15 +69,6 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.method !== 'GET') return;
 
-  /*
-   * 不处理 Chrome 扩展等非 HTTP(S) 请求。
-   */
-  if (
-    url.protocol !== 'http:' &&
-    url.protocol !== 'https:'
-  ) {
-    return;
-  }
 
   /*
    * 不处理 Chrome 扩展等非 HTTP(S) 请求。
