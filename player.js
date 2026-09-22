@@ -1,4 +1,8 @@
 import {
+  escapeHtml,
+  formatTime
+} from './utils.js';
+import {
   state,
   storageKeys
 } from './state.js';
@@ -14,8 +18,7 @@ let els = null;
 
 let getMediaUrl = null;
 let getTrackCoverUrl = null;
-let formatTimeValue = null;
-let escapeHtmlValue = null;
+
 
 let showStatus = null;
 
@@ -34,12 +37,6 @@ export function initPlayer(options) {
 
   getTrackCoverUrl =
     options.trackCoverUrl;
-
-  formatTimeValue =
-    options.formatTime;
-
-  escapeHtmlValue =
-    options.escapeHtml;
 
   showStatus =
     options.setStatus;
@@ -604,7 +601,7 @@ export function renderPlayer() {
 
       els.playerArt.innerHTML = `
         <img
-          src="${escapeHtmlValue(
+          src="${escapeHtml(
         coverUrl
       )}"
           alt=""
@@ -719,13 +716,13 @@ function updateProgress() {
 
 
   els.currentTime.textContent =
-    formatTimeValue(
+    formatTime(
       current
     );
 
 
   els.durationTime.textContent =
-    formatTimeValue(
+    formatTime(
       duration
     );
 
@@ -1025,7 +1022,7 @@ function bindPlayerEvents() {
 
 
       els.currentTime.textContent =
-        formatTimeValue(
+        formatTime(
           nextTime
         );
     }

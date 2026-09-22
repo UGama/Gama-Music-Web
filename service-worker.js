@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v75';
+const CACHE_NAME = 'gama-music-shell-v76';
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,8 @@ const SHELL_ASSETS = [
   './player.js',
   './library.js',
   './playlists.js',
+  './playlist-view.js',
+  './utils.js',
   './manifest.webmanifest',
   './assets/icon.svg?v=30',
   './assets/icon-192.png?v=30',
