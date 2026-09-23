@@ -643,6 +643,80 @@ async function acknowledgeIncomingSyncTrackReceived(
 
 }
 
+function buildIncomingSyncPlaylists(
+  playlists,
+  incomingTracks
+) {
+
+  const validTrackIds =
+    new Set(
+      incomingTracks.map(
+        (track) =>
+          String(
+            track.id
+          )
+      )
+    );
+
+
+  return playlists.map(
+    (playlist) => ({
+      ...playlist,
+
+      trackIds:
+        Array.isArray(
+          playlist.trackIds
+        )
+          ? playlist.trackIds.filter(
+            (trackId) =>
+              validTrackIds.has(
+                String(
+                  trackId
+                )
+              )
+          )
+          : []
+    })
+  );
+
+}
+
+
+async function cacheIncomingSyncProgress(
+  playlists,
+  incomingTracks
+) {
+
+  const partialPlaylists =
+    buildIncomingSyncPlaylists(
+      playlists,
+      incomingTracks
+    );
+
+
+  const partialLibrary = {
+    ...state.library,
+
+    tracks:
+      [...incomingTracks],
+
+    playlists:
+      partialPlaylists
+  };
+
+
+  /*
+   * 每成功保存一首歌就留下 checkpoint。
+   *
+   * 即使下一秒 iOS 把 PWA 暂停，
+   * 已经完成的歌曲也不会再变成孤儿文件。
+   */
+  await cacheLibrary(
+    partialLibrary
+  );
+
+}
+
 async function downloadIncomingSyncSnapshot(
   invite,
   manifest,
@@ -1055,6 +1129,18 @@ async function downloadIncomingSyncSnapshot(
       mobileTrack
     );
 
+
+    /*
+     * 这一首已经安全进入 IndexedDB，
+     * 马上保存 library checkpoint。
+     *
+     * 不再等整个 200 多首同步全部完成。
+     */
+    await cacheIncomingSyncProgress(
+      playlists,
+      incomingTracks
+    );
+
   }
 
 
@@ -1152,33 +1238,11 @@ async function downloadIncomingSyncSnapshot(
    * 手机端采用电脑 Web
    * 发来的播放列表快照。
    */
-  const validTrackIds =
-    new Set(
-      incomingTracks.map(
-        (track) => track.id
-      )
-    );
-
-
   const incomingPlaylists =
-    playlists.map(
-      (playlist) => ({
-        ...playlist,
-
-        trackIds:
-          Array.isArray(
-            playlist.trackIds
-          )
-            ? playlist.trackIds.filter(
-              (trackId) =>
-                validTrackIds.has(
-                  trackId
-                )
-            )
-            : []
-      })
+    buildIncomingSyncPlaylists(
+      playlists,
+      incomingTracks
     );
-
 
   const nextLibrary = {
     ...state.library,

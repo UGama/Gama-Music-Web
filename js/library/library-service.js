@@ -107,10 +107,10 @@ export function renderOfflineSummary() {
 export async function loadLibrary() {
 
   /*
-   * Web 音乐库现在完全属于
-   * 当前浏览器自己的 IndexedDB。
+   * Web 音乐库属于当前浏览器自己的 IndexedDB。
    *
-   * Desktop 不再作为音乐库来源。
+   * library 保存歌曲目录，
+   * audio store 保存真正的 MP3 / 封面。
    */
   const cachedLibrary =
     await getCachedLibrary()
@@ -126,34 +126,186 @@ export async function loadLibrary() {
 
 
   /*
-   * 只有真正拥有 MP3 Blob 的歌曲
-   * 才属于当前 Web 音乐库。
+   * 直接读取真正已经保存在手机里的文件。
    *
-   * 以前从 Desktop 同步来的
-   * “只有目录、没有 MP3”的旧歌曲
-   * 会在这里自动消失。
+   * 这一步非常重要：
+   * 如果同步过程中 PWA 被 iOS 暂停，
+   * MP3 可能已经保存成功，
+   * 但 library metadata 还没来得及更新。
    */
-  const tracks =
-    cachedTracks.filter(
-      (track) =>
-        state.offlineTrackIds.has(
-          track.id
-        )
+  const offlineRecords =
+    await getAllOfflineTracks()
+      .catch(() => []);
+
+
+  const audioRecordByTrackId =
+    new Map();
+
+
+  for (
+    const record
+    of offlineRecords
+  ) {
+
+    if (
+      !record?.trackId ||
+      !record?.blob?.size
+    ) {
+      continue;
+    }
+
+
+    audioRecordByTrackId.set(
+      String(
+        record.trackId
+      ),
+      record
     );
+
+  }
+
+
+  const tracks =
+    [];
+
+
+  const knownTrackIds =
+    new Set();
+
+
+  /*
+   * 第一部分：
+   * 保留 library 里原本已经登记，
+   * 并且 MP3 确实还存在的歌曲。
+   *
+   * library 中的 metadata 优先，
+   * 因为这里可能包含用户后续改过的名称。
+   */
+  for (
+    const track
+    of cachedTracks
+  ) {
+
+    const trackId =
+      String(
+        track?.id || ''
+      ).trim();
+
+
+    if (
+      !trackId ||
+      !audioRecordByTrackId.has(
+        trackId
+      )
+    ) {
+      continue;
+    }
+
+
+    tracks.push(
+      track
+    );
+
+
+    knownTrackIds.add(
+      trackId
+    );
+
+  }
+
+
+  /*
+   * 第二部分：
+   * 自动找回 IndexedDB 中真正已经存在，
+   * 但是 library.tracks 漏掉的歌曲。
+   *
+   * 这就是同步中断以后产生的
+   * orphan / 孤儿歌曲。
+   */
+  let recoveredTrackCount =
+    0;
+
+
+  for (
+    const [
+      trackId,
+      record
+    ]
+    of audioRecordByTrackId
+  ) {
+
+    if (
+      knownTrackIds.has(
+        trackId
+      )
+    ) {
+      continue;
+    }
+
+
+    const savedTrack =
+      record?.track;
+
+
+    /*
+     * 老版本如果没有保存 track metadata，
+     * 不能安全猜歌名等信息，
+     * 所以暂时跳过。
+     */
+    if (
+      !savedTrack ||
+      typeof savedTrack !==
+      'object'
+    ) {
+      continue;
+    }
+
+
+    tracks.push({
+      ...savedTrack,
+
+      /*
+       * IndexedDB record 的 trackId
+       * 才是真正 MP3 的 key，
+       * 所以这里强制保持一致。
+       */
+      id:
+        trackId
+    });
+
+
+    knownTrackIds.add(
+      trackId
+    );
+
+
+    recoveredTrackCount +=
+      1;
+
+  }
 
 
   const validTrackIds =
     new Set(
       tracks.map(
         (track) =>
-          track.id
+          String(
+            track.id
+          )
       )
     );
 
 
   /*
-   * 播放列表继续保留，
-   * 但移除已经不存在的歌曲 ID。
+   * 原有播放列表继续保留。
+   *
+   * 对于已经存在的播放列表，
+   * 清掉真正没有 MP3 的歌曲。
+   *
+   * 注意：
+   * 以前同步中断时没有保存成功的
+   * playlist snapshot 无法凭空恢复，
+   * 但歌曲本身可以恢复。
    */
   const playlists =
     Array.isArray(
@@ -170,7 +322,9 @@ export async function loadLibrary() {
               ? playlist.trackIds.filter(
                 (trackId) =>
                   validTrackIds.has(
-                    trackId
+                    String(
+                      trackId
+                    )
                   )
               )
               : []
@@ -181,19 +335,34 @@ export async function loadLibrary() {
 
   state.library = {
     ...(cachedLibrary || {}),
+
     tracks,
+
     playlists
   };
 
 
   /*
-   * 把清理后的结果重新保存，
-   * 以后这些旧 Desktop 目录
-   * 就不会再次回来。
+   * 把修复后的音乐库重新保存。
+   *
+   * 所以 orphan 歌曲只需要恢复一次，
+   * 以后它就正式成为 library 的一部分。
    */
   await cacheLibrary(
     state.library
   ).catch(() => { });
+
+
+  if (
+    recoveredTrackCount >
+    0
+  ) {
+
+    console.info(
+      `Gama Music：已自动找回 ${recoveredTrackCount} 首本地歌曲。`
+    );
+
+  }
 
 
   /*
