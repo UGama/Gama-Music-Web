@@ -1,11 +1,18 @@
 // 二维码同步会话、音频/封面上传、接收、确认及取消。
-import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary } from '../storage/storage.js';
+import {
+  getOfflineTrack, putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary, putStoredData,
+  getStoredData,
+  deleteStoredData
+} from '../storage/storage.js';
 import { state, storageKeys } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 import { els, $, openModal } from '../ui/ui.js';
 import { refreshOfflineState, loadLibrary } from '../library/library-service.js';
 import { getApiBase, getClientAccessToken, getApiAccessToken, getSyncClientId, api } from '../core/api.js';
 import { showMobileDownloadCompleteFeedback, refreshDownloadManagerUi } from '../downloads/mobile-downloads.js';
+
+const INCOMING_SYNC_STATE_KEY =
+  'incoming-sync-state';
 
 async function uploadSyncTrackAudio(
   sessionId,
@@ -1303,12 +1310,15 @@ async function downloadIncomingSyncSnapshot(
 
 
   /*
-   * Desktop 已经确认同步完成，
-   * 临时文件也已经安全清理。
+   * Desktop 已确认整个同步完成。
    *
-   * 现在可以把旧二维码参数
-   * 从手机地址栏移除。
+   * 到这里才删除恢复任务。
    */
+  await deleteStoredData(
+    INCOMING_SYNC_STATE_KEY
+  );
+
+
   clearIncomingSyncInvite();
 
 
@@ -1773,6 +1783,11 @@ export async function stopIncomingSync() {
 
 
   refreshDownloadManagerUi();
+  await deleteStoredData(
+    INCOMING_SYNC_STATE_KEY
+  ).catch(
+    () => { }
+  );
 
 
   try {
@@ -1792,81 +1807,46 @@ export async function stopIncomingSync() {
 
 }
 
-export function cancelIncomingSyncOnExit() {
+export function suspendIncomingSyncOnExit() {
 
   if (
     !state.incomingSyncActive
   ) {
 
     return;
-
-  }
-
-
-  const invite =
-    state.incomingSyncInvite ||
-    getIncomingSyncInvite();
-
-
-  if (!invite) {
-    return;
-  }
-
-
-  state.incomingSyncCancelled =
-    true;
-
-  stopIncomingSyncHeartbeat();
-  state.incomingSyncAbortController
-    ?.abort();
-
-
-  const cancelUrl =
-    `${invite.server}` +
-    `/api/sync/sessions/` +
-    `${encodeURIComponent(
-      invite.sessionId
-    )}` +
-    `/cancel` +
-    `?clientId=${encodeURIComponent(
-      getSyncClientId()
-    )}`;
-
-
-  try {
-
-    if (
-      navigator.sendBeacon
-    ) {
-
-      navigator.sendBeacon(
-        cancelUrl
-      );
-
-      return;
-
-    }
-
-  } catch {
-    // fallback below
   }
 
 
   /*
-   * 不支持 sendBeacon 时的兜底。
+   * 页面退出 / iOS 暂停时，
+   * 只停止手机当前请求。
+   *
+   * 不通知 Desktop 取消，
+   * 也不删除 IndexedDB 中的恢复信息。
+   *
+   * 这样重新打开以后可以继续。
    */
-  fetch(
-    cancelUrl,
-    {
-      method:
-        'POST',
+  stopIncomingSyncHeartbeat();
 
-      keepalive:
-        true
-    }
-  ).catch(
-    () => { }
-  );
+
+  state.incomingSyncAbortController
+    ?.abort();
+
+
+  state.incomingSyncAbortController =
+    null;
+
+
+  state.incomingSyncActive =
+    false;
+
+
+  state.incomingSyncProgress =
+    0;
+
+
+  state.incomingSyncMessage =
+    '同步已暂停';
 
 }
 
@@ -2114,6 +2094,29 @@ export async function openIncomingSyncPreview() {
             '后台运行';
 
           try {
+
+            /*
+             * 下载开始前先保存恢复信息。
+             *
+             * 如果 iOS 中途暂停 PWA，
+             * 下次打开仍然知道：
+             * 哪个同步任务、哪个 Desktop、
+             * 哪些歌曲和播放列表需要继续。
+             */
+            await putStoredData(
+              INCOMING_SYNC_STATE_KEY,
+              {
+                savedAt:
+                  new Date()
+                    .toISOString(),
+
+                invite,
+
+                manifest
+              }
+            );
+
+
             await reportIncomingSyncMissing(
               invite,
               missing
@@ -2203,11 +2206,8 @@ export async function openIncomingSyncPreview() {
             if (
               error?.code ===
               'SYNC_CANCELLED' ||
-              (
-                state.incomingSyncCancelled &&
-                error?.name ===
-                'AbortError'
-              )
+              error?.name ===
+              'AbortError'
             ) {
 
               return;
@@ -3132,3 +3132,249 @@ ${localTracks.length}
 
 }
 
+export async function resumeIncomingSync() {
+
+  /*
+   * 当前本来就在同步，
+   * 不启动第二个恢复任务。
+   */
+  if (
+    state.incomingSyncActive
+  ) {
+
+    return false;
+  }
+
+
+  const saved =
+    await getStoredData(
+      INCOMING_SYNC_STATE_KEY
+    ).catch(
+      () => null
+    );
+
+
+  /*
+   * 没有未完成任务。
+   */
+  if (
+    !saved?.manifest ||
+    !saved?.invite
+  ) {
+
+    return false;
+  }
+
+
+  const manifest =
+    saved.manifest;
+
+
+  const invite =
+    saved.invite;
+
+
+  const tracks =
+    Array.isArray(
+      manifest.tracks
+    )
+      ? manifest.tracks
+      : [];
+
+
+  if (
+    !tracks.length
+  ) {
+
+    await deleteStoredData(
+      INCOMING_SYNC_STATE_KEY
+    );
+
+
+    return false;
+  }
+
+
+  /*
+   * 直接检查 IndexedDB。
+   *
+   * 不相信上一次保存到哪一首，
+   * 而是以真正存在的 MP3 / 封面
+   * 作为最终事实来源。
+   */
+  const missing =
+    await findIncomingSyncMissing(
+      manifest
+    );
+
+
+  const completedAudioCount =
+    tracks.length -
+    missing.audioTrackIds.length;
+
+
+  console.info(
+    `Gama Music：发现未完成同步，` +
+    `${completedAudioCount}/` +
+    `${tracks.length} 首 MP3 已经存在。`
+  );
+
+
+  /*
+   * 恢复同步状态。
+   */
+  state.incomingSyncCancelled =
+    false;
+
+
+  state.incomingSyncAbortController
+    ?.abort();
+
+
+  state.incomingSyncAbortController =
+    new AbortController();
+
+
+  state.incomingSyncInvite =
+    invite;
+
+
+  state.incomingSyncActive =
+    true;
+
+
+  state.incomingSyncProgress =
+    tracks.length
+      ? Math.round(
+        (
+          completedAudioCount /
+          tracks.length
+        ) *
+        100
+      )
+      : 0;
+
+
+  state.incomingSyncMessage =
+    `正在恢复同步 · ` +
+    `${completedAudioCount} / ` +
+    `${tracks.length}`;
+
+
+  refreshDownloadManagerUi();
+
+
+  try {
+
+    /*
+     * 重新告诉 Desktop：
+     * 手机现在实际上还缺什么。
+     *
+     * 比继续沿用旧 missing 更可靠，
+     * 因为中途可能已经成功保存了很多首。
+     */
+    await reportIncomingSyncMissing(
+      invite,
+      missing
+    );
+
+
+    startIncomingSyncHeartbeat(
+      invite
+    );
+
+
+    const result =
+      await downloadIncomingSyncSnapshot(
+        invite,
+        manifest,
+        missing
+      );
+
+
+    state.incomingSyncProgress =
+      100;
+
+
+    state.incomingSyncMessage =
+      '同步完成';
+
+
+    refreshDownloadManagerUi();
+
+
+    showMobileDownloadCompleteFeedback();
+
+
+    return result;
+
+  } catch (error) {
+
+    /*
+     * 页面被 iOS 暂停 / 浏览器终止 fetch，
+     * 不把它视为用户主动取消。
+     *
+     * 恢复记录仍然留在 IndexedDB，
+     * 下次再继续。
+     */
+    if (
+      error?.name ===
+      'AbortError'
+    ) {
+
+      console.info(
+        '同步已暂停，等待下次恢复。'
+      );
+
+
+      return false;
+    }
+
+
+    if (
+      error?.code ===
+      'SYNC_CANCELLED'
+    ) {
+
+      return false;
+    }
+
+
+    console.warn(
+      '自动恢复同步失败：',
+      error
+    );
+
+
+    throw error;
+
+  } finally {
+
+    stopIncomingSyncHeartbeat();
+
+
+    state.incomingSyncActive =
+      false;
+
+
+    state.incomingSyncProgress =
+      0;
+
+
+    state.incomingSyncMessage =
+      '';
+
+
+    state.incomingSyncAbortController =
+      null;
+
+
+    state.incomingSyncInvite =
+      null;
+
+
+    refreshDownloadManagerUi();
+
+  }
+
+}

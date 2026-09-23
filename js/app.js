@@ -11,7 +11,12 @@ import { mediaUrl, trackCoverUrl } from './core/api.js';
 import { playlistSaveButtonState, restoreMobileDownloadFailures, saveTrackToIphone, savePlaylistToIphone, resumeMobileDownloads, removeTrackFromIphone, openDownloadManager, initMobileDownloads } from './downloads/mobile-downloads.js';
 import { setFavoriteStatus, previewVideo, startDownload, pollJob, startFavoriteImport, pollFavoriteJob, initBilibili } from './downloads/bilibili.js';
 import { openSleepTimer, startSleepTimerMonitor } from './player/sleep-timer.js';
-import { cancelIncomingSyncOnExit, openIncomingSyncPreview, stopIncomingSync } from './sync/sync.js';
+import {
+  suspendIncomingSyncOnExit,
+  openIncomingSyncPreview,
+  stopIncomingSync,
+  resumeIncomingSync
+} from './sync/sync.js';
 import { openSettings } from './ui/settings.js';
 import { registerServiceWorker } from './core/pwa.js';
 import { stopQrScanner } from './sync/qr-scanner.js';
@@ -761,14 +766,41 @@ async function handleAction(event) {
 function bindEvents() {
   window.addEventListener(
     'pagehide',
-    cancelIncomingSyncOnExit
+    suspendIncomingSyncOnExit
   );
 
 
   window.addEventListener(
     'beforeunload',
-    cancelIncomingSyncOnExit
+    suspendIncomingSyncOnExit
   );
+
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+
+      if (
+        document.hidden
+      ) {
+        return;
+      }
+
+
+      resumeIncomingSync()
+        .catch(
+          (error) => {
+
+            console.warn(
+              '回到前台后恢复手机同步失败：',
+              error
+            );
+
+          }
+        );
+
+    }
+  );
+
   els.previewButton.addEventListener('click', previewVideo);
   els.downloadForm.addEventListener('submit', startDownload);
   if (els.favoriteImportForm) {
@@ -1054,7 +1086,31 @@ document.addEventListener('DOMContentLoaded', async () => {
    * 如果 URL 里带有手机同步邀请，
    * 在页面初始化完成以后读取它。
    */
-  await openIncomingSyncPreview();
+  const openedIncomingSyncPreview =
+    await openIncomingSyncPreview();
+
+
+  /*
+   * 当前 URL 没有新的二维码同步邀请时，
+   * 才尝试恢复上一次被 iOS 中断的任务。
+   */
+  if (
+    !openedIncomingSyncPreview
+  ) {
+
+    resumeIncomingSync()
+      .catch(
+        (error) => {
+
+          console.warn(
+            '启动时恢复手机同步失败：',
+            error
+          );
+
+        }
+      );
+
+  }
 
 
   startServerConnectionMonitor();

@@ -212,3 +212,54 @@ export async function getCachedLibrary() {
 
   return record?.value || null;
 }
+
+export async function putStoredData(
+  key,
+  value
+) {
+
+  return offlineRequest(
+    offlineDb.dataStore,
+    'readwrite',
+    (store) =>
+      store.put({
+        key,
+        value
+      })
+  );
+}
+
+
+export async function getStoredData(
+  key
+) {
+
+  const record =
+    await offlineRequest(
+      offlineDb.dataStore,
+      'readonly',
+      (store) =>
+        store.get(
+          key
+        )
+    );
+
+
+  return record?.value ??
+    null;
+}
+
+
+export async function deleteStoredData(
+  key
+) {
+
+  return offlineRequest(
+    offlineDb.dataStore,
+    'readwrite',
+    (store) =>
+      store.delete(
+        key
+      )
+  );
+}
