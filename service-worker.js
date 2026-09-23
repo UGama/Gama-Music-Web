@@ -1,6 +1,9 @@
 'use strict';
 
-const CACHE_NAME = 'gama-music-shell-v78';
+const APP_VERSION = '80';
+
+const CACHE_NAME =
+  `gama-music-shell-v${APP_VERSION}`;
 const SHELL_ASSETS = [
   './',
   './index.html',
@@ -48,13 +51,34 @@ const SHELL_ASSETS = [
 ];
 
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(SHELL_ASSETS))
-      .then(() => self.skipWaiting())
-  );
-});
+self.addEventListener(
+  'install',
+  (event) => {
+
+    event.waitUntil(
+      caches
+        .open(
+          CACHE_NAME
+        )
+        .then(
+          (cache) =>
+            cache.addAll(
+              SHELL_ASSETS.map(
+                (asset) =>
+                  new Request(
+                    asset,
+                    {
+                      cache:
+                        'reload'
+                    }
+                  )
+              )
+            )
+        )
+    );
+
+  }
+);
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -63,6 +87,71 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim())
   );
 });
+
+self.addEventListener(
+  'message',
+  (event) => {
+
+    const type =
+      event.data?.type;
+
+
+    /*
+     * 用户点击“立即更新”以后，
+     * 才让等待中的新版立即接管。
+     */
+    if (
+      type ===
+      'SKIP_WAITING'
+    ) {
+
+      self.skipWaiting();
+
+      return;
+    }
+
+
+    /*
+     * 页面可以询问：
+     * 当前 / 等待中的 Service Worker
+     * 是什么版本。
+     */
+    if (
+      type ===
+      'GET_VERSION'
+    ) {
+
+      const response = {
+        type:
+          'GAMA_VERSION',
+
+        version:
+          APP_VERSION
+      };
+
+
+      if (
+        event.ports?.[0]
+      ) {
+
+        event.ports[0]
+          .postMessage(
+            response
+          );
+
+        return;
+      }
+
+
+      event.source
+        ?.postMessage(
+          response
+        );
+
+    }
+
+  }
+);
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -140,57 +229,143 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  /*
+   * 其他普通静态资源：
+   *
+   * 在线时优先拿最新版；
+   * 请求成功以后才更新 Cache；
+   * 离线时再使用旧 Cache。
+   */
+
+
+  /*
+   * 第三方资源不由 Gama Music
+   * 的 Service Worker 缓存。
+   */
+  if (
+    url.origin !==
+    self.location.origin
+  ) {
+
+    return;
+
+  }
+
+
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
 
-        const copy =
-          response.clone();
-
-        caches.open(
-          CACHE_NAME
-        ).then(
-          (cache) =>
-            cache.put(
-              event.request,
-              copy
-            )
-        );
-
-        return response;
-
-      })
-      .catch(async () => {
-
-        /*
-         * 忽略 ?v=xx，
-         * 例如 app.js?v=30 也可以匹配
-         * 已缓存的 app.js。
-         */
-        const cached =
-          await caches.match(
-            event.request,
-            {
-              ignoreSearch: true
-            }
-          );
-
-        if (cached) {
-          return cached;
+    fetch(
+      new Request(
+        event.request,
+        {
+          cache:
+            'no-store'
         }
+      )
+    )
+      .then(
+        (response) => {
+
+          /*
+           * 只有 HTTP 2xx 成功响应
+           * 才允许写进 Cache。
+           *
+           * 避免把 404 / 500
+           * 缓存成“最新版”。
+           */
+          if (
+            response.ok
+          ) {
+
+            const copy =
+              response.clone();
 
 
-        /*
-         * 页面本身断网时，
-         * 回到已经缓存的 Gama Music。
-         */
-        return caches.match(
-          './index.html',
-          {
-            ignoreSearch: true
+            caches
+              .open(
+                CACHE_NAME
+              )
+              .then(
+                (cache) =>
+                  cache.put(
+                    event.request,
+                    copy
+                  )
+              );
+
           }
-        );
 
-      })
+
+          return response;
+
+        }
+      )
+      .catch(
+        async () => {
+
+          /*
+           * 离线时忽略类似：
+           *
+           * app.js?v=78
+           *
+           * 这样的 query string。
+           */
+          const cached =
+            await caches.match(
+              event.request,
+              {
+                ignoreSearch:
+                  true
+              }
+            );
+
+
+          if (
+            cached
+          ) {
+
+            return cached;
+
+          }
+
+
+          /*
+           * 只有真正打开页面时，
+           * 才允许退回 index.html。
+           *
+           * JS / CSS 文件如果找不到，
+           * 绝对不能返回 HTML。
+           */
+          if (
+            event.request.mode ===
+            'navigate'
+          ) {
+
+            const fallback =
+              await caches.match(
+                './index.html',
+                {
+                  ignoreSearch:
+                    true
+                }
+              );
+
+
+            if (
+              fallback
+            ) {
+
+              return fallback;
+
+            }
+
+          }
+
+
+          return Response.error();
+
+        }
+      )
+
   );
 });
