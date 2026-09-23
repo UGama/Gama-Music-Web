@@ -1,7 +1,7 @@
 // 共享 DOM 引用、图标、状态提示、弹窗和视图切换。
-import { state } from './state.js';
+import { state } from '../core/state.js';
 import { syncPlaylistDetailChrome } from './playlist-view.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml } from '../core/utils.js';
 
 // App wires lifecycle callbacks here to keep module imports acyclic.
 let stopQrScanner;

@@ -1,12 +1,12 @@
 // 设置弹窗与设置操作入口。
-import { storageKeys } from './state.js';
-import { escapeHtml, formatBytes } from './utils.js';
+import { storageKeys } from '../core/state.js';
+import { escapeHtml, formatBytes } from '../core/utils.js';
 import { isMobilePlayerMode, els, $, openModal } from './ui.js';
-import { getApiBase, getRelayAccessKey, getClientAccessToken, api } from './api.js';
-import { loadLibrary, checkServerConnection } from './library-service.js';
-import { exportGamaBackup, importGamaBackup, importLocalMp3Files } from './backup.js';
-import { openPhoneQrScanner } from './qr-scanner.js';
-import { createPhoneSyncSession } from './sync.js';
+import { getApiBase, getRelayAccessKey, getClientAccessToken, api } from '../core/api.js';
+import { loadLibrary, checkServerConnection } from '../library/library-service.js';
+import { exportGamaBackup, importGamaBackup, importLocalMp3Files } from '../library/backup.js';
+import { openPhoneQrScanner } from '../sync/qr-scanner.js';
+import { createPhoneSyncSession } from '../sync/sync.js';
 
 export function openSettings() {
 

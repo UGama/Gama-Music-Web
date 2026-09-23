@@ -1,21 +1,21 @@
-import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, cacheLibrary } from './storage.js';
-import { state, storageKeys } from './state.js';
-import { initPlayer, playTrack, renderPlayer, renderModeButtons, setMode } from './player.js';
-import { visibleLibraryTracks } from './library.js';
-import { getSelectedPlaylist, selectPlaylist, createLocalPlaylist, renamePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist } from './playlists.js';
-import { initPlaylistView, renderPlaylists } from './playlist-view.js';
-import { escapeHtml, formatTime } from './utils.js';
-import { isMobilePlayerMode, els, $, icon, initElements, applyMobilePlayerMode, setStatus, setActiveView, openModal, closeModal, openTextEditor, initUi } from './ui.js';
-import { refreshOfflineState, renderOfflineSummary, loadLibrary, checkServerConnection, startServerConnectionMonitor, saveLocalLibrary, initLibraryService } from './library-service.js';
-import { mediaUrl, trackCoverUrl } from './api.js';
-import { playlistSaveButtonState, restoreMobileDownloadFailures, saveTrackToIphone, savePlaylistToIphone, resumeMobileDownloads, removeTrackFromIphone, openDownloadManager, initMobileDownloads } from './mobile-downloads.js';
-import { setFavoriteStatus, previewVideo, startDownload, pollJob, startFavoriteImport, pollFavoriteJob, initBilibili } from './bilibili.js';
-import { openSleepTimer, startSleepTimerMonitor } from './sleep-timer.js';
-import { cancelIncomingSyncOnExit, openIncomingSyncPreview, stopIncomingSync } from './sync.js';
-import { openSettings } from './settings.js';
-import { registerServiceWorker } from './pwa.js';
-import { stopQrScanner } from './qr-scanner.js';
-import { initBackup } from './backup.js';
+import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, cacheLibrary } from './storage/storage.js';
+import { state, storageKeys } from './core/state.js';
+import { initPlayer, playTrack, renderPlayer, renderModeButtons, setMode } from './player/player.js';
+import { visibleLibraryTracks } from './library/library.js';
+import { getSelectedPlaylist, selectPlaylist, createLocalPlaylist, renamePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist } from './library/playlists.js';
+import { initPlaylistView, renderPlaylists } from './ui/playlist-view.js';
+import { escapeHtml, formatTime } from './core/utils.js';
+import { isMobilePlayerMode, els, $, icon, initElements, applyMobilePlayerMode, setStatus, setActiveView, openModal, closeModal, openTextEditor, initUi } from './ui/ui.js';
+import { refreshOfflineState, renderOfflineSummary, loadLibrary, checkServerConnection, startServerConnectionMonitor, saveLocalLibrary, initLibraryService } from './library/library-service.js';
+import { mediaUrl, trackCoverUrl } from './core/api.js';
+import { playlistSaveButtonState, restoreMobileDownloadFailures, saveTrackToIphone, savePlaylistToIphone, resumeMobileDownloads, removeTrackFromIphone, openDownloadManager, initMobileDownloads } from './downloads/mobile-downloads.js';
+import { setFavoriteStatus, previewVideo, startDownload, pollJob, startFavoriteImport, pollFavoriteJob, initBilibili } from './downloads/bilibili.js';
+import { openSleepTimer, startSleepTimerMonitor } from './player/sleep-timer.js';
+import { cancelIncomingSyncOnExit, openIncomingSyncPreview, stopIncomingSync } from './sync/sync.js';
+import { openSettings } from './ui/settings.js';
+import { registerServiceWorker } from './core/pwa.js';
+import { stopQrScanner } from './sync/qr-scanner.js';
+import { initBackup } from './library/backup.js';
 
 function renderTrackCover(track) {
   const coverUrl =

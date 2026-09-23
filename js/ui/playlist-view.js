@@ -1,13 +1,13 @@
 import {
     state
-} from './state.js';
+} from '../core/state.js';
 
 import {
     getSelectedPlaylist
-} from './playlists.js';
+} from '../library/playlists.js';
 import {
     escapeHtml
-} from './utils.js';
+} from '../core/utils.js';
 
 let els = null;
 

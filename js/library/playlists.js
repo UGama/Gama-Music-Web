@@ -1,7 +1,7 @@
 import {
     state,
     storageKeys
-} from './state.js';
+} from '../core/state.js';
 
 
 function createLocalId(prefix) {

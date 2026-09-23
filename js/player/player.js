@@ -1,18 +1,18 @@
 import {
   escapeHtml,
   formatTime
-} from './utils.js';
+} from '../core/utils.js';
 import {
   state,
   storageKeys
-} from './state.js';
+} from '../core/state.js';
 
 import {
   getOfflineTrack
-} from './storage.js';
+} from '../storage/storage.js';
 import {
   sortedLibraryTracks
-} from './library.js';
+} from '../library/library.js';
 
 let els = null;
 

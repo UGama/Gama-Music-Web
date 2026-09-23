@@ -1,9 +1,9 @@
 // 本地音乐库加载、离线状态、保存和服务连接监测。
-import { getAllOfflineTracks, cacheLibrary, getCachedLibrary } from './storage.js';
-import { state, storageKeys } from './state.js';
-import { formatBytes } from './utils.js';
-import { isMobilePlayerMode, els, setConnection } from './ui.js';
-import { getApiBase, api } from './api.js';
+import { getAllOfflineTracks, cacheLibrary, getCachedLibrary } from '../storage/storage.js';
+import { state, storageKeys } from '../core/state.js';
+import { formatBytes } from '../core/utils.js';
+import { isMobilePlayerMode, els, setConnection } from '../ui/ui.js';
+import { getApiBase, api } from '../core/api.js';
 
 // App wires lifecycle callbacks here to keep module imports acyclic.
 let render, resumeMobileDownloads;

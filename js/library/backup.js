@@ -1,7 +1,7 @@
 // Gama 备份导入导出及本地 MP3 导入。
-import { putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary } from './storage.js';
-import { state, storageKeys } from './state.js';
-import { els, setConnection } from './ui.js';
+import { putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary } from '../storage/storage.js';
+import { state, storageKeys } from '../core/state.js';
+import { els, setConnection } from '../ui/ui.js';
 import { refreshOfflineState } from './library-service.js';
 
 // App wires lifecycle callbacks here to keep module imports acyclic.

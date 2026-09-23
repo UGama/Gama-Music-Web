@@ -1,11 +1,11 @@
 // 二维码同步会话、音频/封面上传、接收、确认及取消。
-import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary } from './storage.js';
-import { state, storageKeys } from './state.js';
-import { escapeHtml } from './utils.js';
-import { els, $, openModal } from './ui.js';
-import { refreshOfflineState, loadLibrary } from './library-service.js';
-import { getApiBase, getClientAccessToken, getApiAccessToken, getSyncClientId, api } from './api.js';
-import { showMobileDownloadCompleteFeedback, refreshDownloadManagerUi } from './mobile-downloads.js';
+import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary } from '../storage/storage.js';
+import { state, storageKeys } from '../core/state.js';
+import { escapeHtml } from '../core/utils.js';
+import { els, $, openModal } from '../ui/ui.js';
+import { refreshOfflineState, loadLibrary } from '../library/library-service.js';
+import { getApiBase, getClientAccessToken, getApiAccessToken, getSyncClientId, api } from '../core/api.js';
+import { showMobileDownloadCompleteFeedback, refreshDownloadManagerUi } from '../downloads/mobile-downloads.js';
 
 async function uploadSyncTrackAudio(
   sessionId,

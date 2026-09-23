@@ -8,39 +8,44 @@
 
 ```text
 Gama-Music-Web/
-├── index.html                 页面入口，app.js?v=77
-├── app.js                     初始化、依赖接线、歌曲卡片与页面事件分发
-├── state.js                   共享状态和 localStorage 键（原文件）
-├── storage.js                 IndexedDB 音频、封面和音乐库（原文件）
-├── library.js                 歌曲排序与搜索过滤（原文件）
-├── library-service.js         本地库加载/保存、离线状态、服务连接监测
-├── player.js                  播放队列、播放控制、Media Session（原文件）
-├── playlists.js               播放列表数据操作（原文件）
-├── playlist-view.js           播放列表界面与手机滚动标题（原文件）
-├── utils.js                   时间、字节数和 HTML 转义（原文件）
-├── download-store.js          下载失败/历史/队列/暂停状态持久化
-├── mobile-downloads.js        手机下载、暂停/恢复/重试、下载管理界面
-├── transfer.js                Blob 流式下载与进度回调
-├── bilibili.js                视频预览、下载轮询、收藏夹导入与失败详情
-├── sync.js                    同步会话、上传/接收、心跳、确认与取消
-├── qr-scanner.js              摄像头扫码与流/动画帧清理
-├── settings.js                设置界面与操作入口
-├── sleep-timer.js             睡眠定时器界面、持久化和到时暂停
-├── backup.js                  Gama 备份导入导出、本地 MP3 导入
-├── api.js                     服务地址、认证、API 请求、媒体 URL
-├── ui.js                      DOM 引用、图标、提示、弹窗和视图切换
-├── pwa.js                     Service Worker 注册及更新检测
-├── service-worker.js          外壳预缓存与原有网络/离线策略
-├── styles.css                 原样保留
-├── manifest.webmanifest       原样保留
-├── assets/                    原样保留
-├── vendor/                    原样保留的二维码库
-├── scripts/
-│   ├── check.cjs              语法、作用域、依赖和预缓存检查
-│   └── smoke.cjs              桌面/PWA 模拟回归测试
-├── package.json               仅开发检查依赖，不引入网站构建步骤
-├── package-lock.json          锁定检查工具版本
-└── REFACTOR.md                本说明
+├── index.html                 页面入口，js/app.js?v=78
+├── service-worker.js          保留在根目录，缓存 v78
+├── styles.css
+├── manifest.webmanifest
+├── assets/
+├── vendor/
+├── scripts/                   检查与模拟回归
+├── package.json / package-lock.json
+├── REFACTOR.md
+└── js/
+    ├── app.js                 启动与事件协调
+    ├── core/
+    │   ├── state.js
+    │   ├── api.js
+    │   ├── utils.js
+    │   └── pwa.js
+    ├── storage/
+    │   ├── storage.js
+    │   └── download-store.js
+    ├── library/
+    │   ├── library.js
+    │   ├── library-service.js
+    │   ├── playlists.js
+    │   └── backup.js
+    ├── player/
+    │   ├── player.js
+    │   └── sleep-timer.js
+    ├── downloads/
+    │   ├── mobile-downloads.js
+    │   ├── bilibili.js
+    │   └── transfer.js
+    ├── sync/
+    │   ├── sync.js
+    │   └── qr-scanner.js
+    └── ui/
+        ├── ui.js
+        ├── playlist-view.js
+        └── settings.js
 ```
 
 原有共享模块共七个：state、storage、library、player、playlists、playlist-view、utils；另保留原 Service Worker 文件并仅做下面列明的修改。
@@ -80,7 +85,7 @@ Gama-Music-Web/
 ## 已完成的验证
 
 1. 对项目所有 24 个 .js 文件（含 vendor）以及两个 .cjs 检查脚本执行 Node 语法检查，全部通过。
-2. 对 22 个顶层 JS 文件检查未解析标识符、未使用 import、路径、命名导出和循环依赖，全部通过。二维码库提供的 jsQR/QRCode 明确列为外部全局。
+2. 对 22 个 JS 文件检查未解析标识符、未使用 import、路径、命名导出和循环依赖，全部通过。二维码库提供的 jsQR/QRCode 明确列为外部全局。
 3. 检查全部预缓存路径存在、所有模块及两个二维码 vendor 脚本均在预缓存中、入口和缓存版本一致，全部通过。
 4. 对照重构前源码：121 个保留函数内容逐字一致；另一个保留函数仅改为调用存储层清空历史；删除 5 个无引用函数。
 5. 在 JSDOM + fake-indexeddb 模拟环境分别启动原版和重构版，覆盖桌面及独立手机 PWA 条件，确认初始化页面及设置、睡眠、下载管理弹窗 HTML 完全相同。
@@ -108,3 +113,12 @@ Gama-Music-Web/
 ZIP 包包含完整静态站点与验证脚本，解压后的 Gama-Music-Web 内容可用于替换对应项目文件。网站仍可按原 GitHub Pages 静态部署方式使用，不需要 npm build；npm 仅用于开发检查。
 
 本次没有删除或重建 IndexedDB，也没有改变 localStorage 键。部署时应让 index.html、全部 JS 和 service-worker.js 同批上线，避免模块版本混用。不要为了更新代码而清空手机网站数据；那会删除本地歌曲。
+
+
+## 2026-09-23：按职责分目录
+
+将 21 个应用模块移动到 js/ 及 core、storage、library、player、downloads、sync、ui 子目录。此前重构说明中的短文件名均指上方目录中的对应模块。所有模块 import 改为相对于模块文件的路径，HTML 入口改为 js/app.js?v=78，Service Worker 缓存升级到 v78 并同步预缓存路径。Service Worker 仍在站点根目录注册，控制范围不变。
+
+图标、播放列表封面和二维码 vendor 脚本仍按页面 URL 解析，不随模块文件路径移动；它们的 URL 保持原样。检查脚本现在递归扫描 js/，按导入模块所在目录解析依赖；模拟测试也使用真实相对模块路径。此次仅移动文件与调整路径，业务函数内容不变。
+
+目录职责：core 为共享状态/网络/工具/PWA；storage 为 IndexedDB 与下载持久化；library 为音乐库/播放列表数据与备份；player 为播放控制和睡眠定时器；downloads 为手机下载/Bilibili/传输；sync 为同步与摄像头扫码；ui 为共享界面、播放列表视图和设置。

@@ -1,8 +1,8 @@
 // 睡眠定时器状态、弹窗和到时暂停。
-import { state, storageKeys } from './state.js';
+import { state, storageKeys } from '../core/state.js';
 import { renderPlayer } from './player.js';
-import { escapeHtml } from './utils.js';
-import { els, $, openModal } from './ui.js';
+import { escapeHtml } from '../core/utils.js';
+import { els, $, openModal } from '../ui/ui.js';
 
 function updateSleepTimerButton() {
 

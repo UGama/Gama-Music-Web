@@ -1,11 +1,11 @@
 // 移动端音频/封面保存、队列恢复、失败重试和下载管理界面。
-import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, cacheLibrary } from './storage.js';
-import { state } from './state.js';
-import { escapeHtml } from './utils.js';
-import { isMobilePlayerMode, els, setStatus, openModal } from './ui.js';
-import { refreshOfflineState, checkServerConnection } from './library-service.js';
-import { mediaUrl, coverMediaUrl } from './api.js';
-import { clearStoredMobileDownloadHistory, getStoredMobileDownloadFailures, storeMobileDownloadFailures, getMobileDownloadHistory, addMobileDownloadHistory, updateMobileDownloadHistory, getMobileDownloadQueue, addMobileDownloadJob, removeMobileDownloadJob, isMobileDownloadPaused, setMobileDownloadPaused } from './download-store.js';
+import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, cacheLibrary } from '../storage/storage.js';
+import { state } from '../core/state.js';
+import { escapeHtml } from '../core/utils.js';
+import { isMobilePlayerMode, els, setStatus, openModal } from '../ui/ui.js';
+import { refreshOfflineState, checkServerConnection } from '../library/library-service.js';
+import { mediaUrl, coverMediaUrl } from '../core/api.js';
+import { clearStoredMobileDownloadHistory, getStoredMobileDownloadFailures, storeMobileDownloadFailures, getMobileDownloadHistory, addMobileDownloadHistory, updateMobileDownloadHistory, getMobileDownloadQueue, addMobileDownloadJob, removeMobileDownloadJob, isMobileDownloadPaused, setMobileDownloadPaused } from '../storage/download-store.js';
 import { fetchBlobWithProgress } from './transfer.js';
 
 // App wires lifecycle callbacks here to keep module imports acyclic.

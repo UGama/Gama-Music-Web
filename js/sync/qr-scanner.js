@@ -1,5 +1,5 @@
 // 摄像头扫码与扫描资源的释放。
-import { $, openModal, closeModal } from './ui.js';
+import { $, openModal, closeModal } from '../ui/ui.js';
 import { openIncomingSyncPreview } from './sync.js';
 
 let qrScannerStream = null;

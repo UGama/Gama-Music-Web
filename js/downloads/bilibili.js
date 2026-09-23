@@ -1,12 +1,12 @@
 // Bilibili 预览、下载轮询、收藏夹导入和失败详情。
-import { cacheLibrary } from './storage.js';
-import { state, storageKeys } from './state.js';
-import { createWebPlaylistId } from './playlists.js';
-import { renderPlaylists } from './playlist-view.js';
-import { escapeHtml } from './utils.js';
-import { els, setStatus, setActiveView, openModal } from './ui.js';
-import { refreshOfflineState, loadLibrary } from './library-service.js';
-import { getApiBase, api } from './api.js';
+import { cacheLibrary } from '../storage/storage.js';
+import { state, storageKeys } from '../core/state.js';
+import { createWebPlaylistId } from '../library/playlists.js';
+import { renderPlaylists } from '../ui/playlist-view.js';
+import { escapeHtml } from '../core/utils.js';
+import { els, setStatus, setActiveView, openModal } from '../ui/ui.js';
+import { refreshOfflineState, loadLibrary } from '../library/library-service.js';
+import { getApiBase, api } from '../core/api.js';
 import { saveTrackBlobToIphone } from './mobile-downloads.js';
 
 // App wires lifecycle callbacks here to keep module imports acyclic.

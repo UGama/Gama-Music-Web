@@ -1,5 +1,5 @@
 // 下载失败、历史、队列和暂停状态的 localStorage 持久化。
-import { storageKeys } from './state.js';
+import { storageKeys } from '../core/state.js';
 
 export function getStoredMobileDownloadFailures() {
 
