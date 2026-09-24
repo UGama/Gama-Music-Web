@@ -180,7 +180,7 @@ export async function api(path, options = {}) {
   } catch {
 
     throw new Error(
-      '无法连接 Mac 服务，请检查 Gama Music Server 和服务地址。'
+      '无法连接同步服务，请检查同步服务和服务地址。'
     );
 
   }
@@ -210,7 +210,7 @@ export async function api(path, options = {}) {
       }
 
       throw new Error(
-        'Mac 服务返回了无法识别的数据。'
+        '同步服务返回了无法识别的数据。'
       );
 
     }

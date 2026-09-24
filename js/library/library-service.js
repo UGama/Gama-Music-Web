@@ -416,7 +416,7 @@ export async function loadLibrary() {
 
   setConnection(
     state.serverConnected
-      ? `Mac 服务已连接 · ${localStorageSummary()}`
+      ? `同步服务已连接 · ${localStorageSummary()}`
       : `本地模式 · ${localStorageSummary()}`,
     true
   );
@@ -501,7 +501,7 @@ export async function checkServerConnection() {
 
 
     setConnection(
-      `Mac 服务已连接 · ${localStorageSummary()}`,
+      `同步服务已连接 · ${localStorageSummary()}`,
       true
     );
 

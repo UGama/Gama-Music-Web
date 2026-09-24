@@ -97,7 +97,7 @@ export function openSettings() {
         </span>
 
         <p class="settings-note">
-          将当前电脑 Web 音乐库同步到手机。
+          将主音乐库同步到手机。
         </p>
 
         <button

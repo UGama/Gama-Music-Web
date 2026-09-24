@@ -373,7 +373,7 @@ export async function playTrack(
     ) {
 
       throw new Error(
-        '这首歌还没有保存到本地，请连接 Mac 后保存。'
+        '这首歌还没有保存到本地，请连接同步服务后保存。'
       );
     }
 

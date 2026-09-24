@@ -581,7 +581,7 @@ async function retryMobileDownloadFailures(
 
 
       job.message =
-        '等待连接 Mac 服务…';
+        '等待连接同步服务…';
 
 
       refreshDownloadManagerUi();
@@ -687,7 +687,7 @@ async function retryMobileDownloadFailures(
 
 
         job.message =
-          '网络或 Mac 服务暂时不可用 · 等待重新连接…';
+          '网络或同步服务暂时不可用 · 等待重新连接…';
 
 
         refreshDownloadManagerUi();
@@ -1077,7 +1077,7 @@ export async function saveTrackToIphone(
   if (!state.serverConnected) {
     if (hasAudio) {
       setStatus(
-        `歌曲已经保存在本地，但封面尚未保存。连接 Mac 后可以补封面：${track.title}`,
+        `歌曲已经保存在本地，但封面尚未保存。连接同步服务后可以补封面：${track.title}`,
         'warning',
         100
       );
@@ -1086,7 +1086,7 @@ export async function saveTrackToIphone(
     }
 
     throw new Error(
-      '这首歌还没有保存到本地，并且目前没有连接 Mac。'
+      '这首歌还没有保存到本地，并且目前没有连接同步服务。'
     );
   }
 
@@ -1449,7 +1449,7 @@ export async function savePlaylistToIphone(
 
 
         report(
-          `“${playlist.name}”等待连接 Mac 服务…`,
+          `“${playlist.name}”等待连接同步服务…`,
           'info',
           job.progress ?? 0
         );
@@ -1637,7 +1637,7 @@ export async function savePlaylistToIphone(
 
 
           report(
-            `网络或 Mac 服务暂时不可用 · 等待重新连接…`,
+            `网络或同步服务暂时不可用 · 等待重新连接…`,
             'info',
             job.progress ?? 0
           );
@@ -1914,7 +1914,7 @@ export async function removeTrackFromIphone(trackId) {
 
       ? `从 Gama Music 删除“${track?.title || '这首歌'}”？`
 
-      : `删除“${track?.title || '这首歌'}”在这台设备上的本地副本？Mac 上的 MP3 会保留。`;
+      : `删除“${track?.title || '这首歌'}”在这台设备上的本地副本？主音乐库中的 MP3 会保留。`;
 
 
   if (

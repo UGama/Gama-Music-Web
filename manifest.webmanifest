@@ -1,7 +1,7 @@
 {
   "name": "Gama Music",
   "short_name": "Gama Music",
-  "description": "A personal iPhone-first music player for Bilibili MP3 downloads served from your Mac.",
+  "description": "A personal iPhone-first music player for Bilibili MP3 downloads provided by your sync service.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -94,7 +94,7 @@ export async function openPhoneQrScanner() {
   openModal({
 
     title:
-      '扫描电脑二维码',
+      '扫描同步二维码',
 
     context:
       'qr-scanner',
@@ -194,7 +194,7 @@ export async function openPhoneQrScanner() {
 
 
     status.textContent =
-      '请将电脑上的同步二维码放入画面中。';
+      '请将同步二维码放入画面中。';
 
 
   } catch (error) {

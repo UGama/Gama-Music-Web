@@ -81,7 +81,7 @@ async function uploadSyncTrackAudio(
   } catch {
 
     throw new Error(
-      'MP3 上传失败，请检查 Mac 服务连接。'
+      'MP3 上传失败，请检查同步服务连接。'
     );
 
   }
@@ -104,7 +104,7 @@ async function uploadSyncTrackAudio(
     } catch {
 
       throw new Error(
-        'Mac 服务返回了无法识别的数据。'
+        '同步服务返回了无法识别的数据。'
       );
 
     }
@@ -198,7 +198,7 @@ async function uploadSyncTrackCover(
   } catch {
 
     throw new Error(
-      '封面上传失败，请检查 Mac 服务连接。'
+      '封面上传失败，请检查同步服务连接。'
     );
 
   }
@@ -221,7 +221,7 @@ async function uploadSyncTrackCover(
     } catch {
 
       throw new Error(
-        'Mac 服务返回了无法识别的数据。'
+        '同步服务返回了无法识别的数据。'
       );
 
     }
@@ -533,6 +533,39 @@ async function waitForIncomingSyncTrackReady(
       session.preparation || {};
 
 
+    const preparationDetail =
+      els.modal?.dataset.context === 'incoming-sync' &&
+      !els.modal.classList.contains('hidden')
+        ? els.modalBody?.querySelector(
+          '[data-incoming-sync-preparation]'
+        )
+        : null;
+
+    if (preparationDetail) {
+      const hasServiceProgress =
+        Number.isInteger(preparation.completed) &&
+        preparation.completed >= 0 &&
+        Number.isInteger(preparation.total) &&
+        preparation.total > 0 &&
+        preparation.completed <= preparation.total;
+      const hasBufferProgress =
+        Number.isInteger(session.bufferedTrackCount) &&
+        session.bufferedTrackCount >= 0 &&
+        Number.isInteger(session.bufferLimit) &&
+        session.bufferLimit > 0;
+      const detailText = hasServiceProgress
+        ? `服务进度 ${preparation.completed} / ${preparation.total}` +
+          (hasBufferProgress
+            ? ` · 缓冲 ${session.bufferedTrackCount} / ${session.bufferLimit}`
+            : '')
+        : '同步服务正在准备…';
+
+      if (preparationDetail.textContent !== detailText) {
+        preparationDetail.textContent = detailText;
+      }
+    }
+
+
     const signature =
       [
         session.status || '',
@@ -559,7 +592,7 @@ async function waitForIncomingSyncTrackReady(
 
 
       const nextMessage =
-        `电脑准备中 ` +
+        `正在准备 ` +
         `${preparation.completed || 0}` +
         ` / ` +
         `${preparation.total || 0}` +
@@ -596,7 +629,7 @@ async function waitForIncomingSyncTrackReady(
     ) {
 
       throw new Error(
-        '等待电脑准备歌曲超时。'
+        '准备歌曲超时，请稍后重试。'
       );
 
     }
@@ -1090,6 +1123,24 @@ async function downloadIncomingSyncSnapshot(
 
         <p
           class="settings-note"
+          ${stage === '正在准备歌曲…'
+            ? 'data-incoming-sync-preparation'
+            : 'aria-hidden="true"'}
+          style="
+            margin: 0 0 6px;
+            height: 1.5em;
+            line-height: 1.5;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            visibility: ${stage === '正在准备歌曲…' ? 'visible' : 'hidden'};
+          "
+        >${stage === '正在准备歌曲…' ? '同步服务正在准备…' : ''}</p>
+
+        <p
+          class="settings-note"
           style="
             margin: 0;
             white-space: nowrap;
@@ -1125,7 +1176,7 @@ async function downloadIncomingSyncSnapshot(
 
 
       state.incomingSyncMessage =
-        '正在确认同步结果…';
+        '文件处理已完成 · 正在验证同步结果…';
 
 
       refreshDownloadManagerUi();
@@ -1147,22 +1198,45 @@ async function downloadIncomingSyncSnapshot(
 
       els.modalBody.innerHTML = `
   <p>
-  <strong>
-    正在确认同步结果
-  </strong>
-      </p>
+    <strong>正在完成同步</strong>
+  </p>
 
-      <p class="settings-note">
-        正在整理音乐库并检查歌曲和封面是否完整保存。
-      </p>
+  <p>文件处理已完成</p>
 
-      <progress
-        max="100"
-      ></progress>
+  <progress
+    max="100"
+    value="100"
+    style="
+      width: 100%;
+      display: block;
+    "
+  ></progress>
 
-      <p class="settings-note">
-        请稍候，这一步不会重新下载歌曲。
-      </p>
+  <div style="margin-top: 18px;">
+    <p
+      class="settings-note"
+      style="
+        margin: 0 0 4px;
+        font-size: 14px;
+      "
+    >
+      当前步骤
+    </p>
+
+    <p
+      style="
+        margin: 0 0 6px;
+        font-size: 16px;
+        font-weight: 600;
+      "
+    >
+      正在验证同步结果…
+    </p>
+
+    <p class="settings-note" style="margin: 0;">
+      正在检查歌曲和封面是否完整保存
+    </p>
+  </div>
 `;
 
     };
@@ -1297,7 +1371,7 @@ async function downloadIncomingSyncSnapshot(
       renderIncomingSyncProgress(
         true,
         track,
-        '等待电脑准备歌曲…'
+        '正在准备歌曲…'
       );
 
 
@@ -2325,7 +2399,7 @@ export async function stopIncomingSync() {
   } catch (error) {
 
     console.warn(
-      '通知 Desktop 停止同步失败：',
+      '通知同步服务停止失败：',
       error.message
     );
 
@@ -2579,8 +2653,7 @@ export async function openIncomingSyncPreview() {
         true,
       body: `
   <p class="settings-note">
-    已成功连接电脑上的
-          Gama Music Desktop。
+    已成功连接 Gama Music 同步服务。
         </p>
 
         <p>
@@ -2618,7 +2691,7 @@ export async function openIncomingSyncPreview() {
 </p>
 
         <p class="settings-note">
-          Desktop 状态：
+          服务状态：
           ${escapeHtml(
         session.status || '未知'
       )}
@@ -2636,13 +2709,13 @@ export async function openIncomingSyncPreview() {
     <p class="settings-note">
       不需要重新下载音乐文件。
       完成同步后只会更新歌曲信息、播放列表，
-      并清理电脑主库中已经不存在的手机歌曲。
+      并清理主音乐库中已经不存在的手机歌曲。
     </p>
   `
     : `
     <p class="settings-note">
       开始更新后，只会下载手机缺少的歌曲和封面。
-      播放列表将更新为电脑 Web 当前的版本。
+      播放列表将更新为主音乐库当前的版本。
     </p>
   `
 }
@@ -2827,7 +2900,7 @@ ${
   syncResult.removedTrackCount
   ? `
           <p class="settings-note">
-            已删除电脑主库中不存在的旧歌曲：
+            已清理主音乐库中不存在的旧歌曲：
             ${syncResult.removedTrackCount}
             首
           </p>
@@ -3279,7 +3352,7 @@ for (
 
   setSyncLocalUploadStatus(
     isFallback
-      ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
+      ? `Bilibili 下载失败，正在使用本地副本继续同步：${track.title}`
       : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
   );
 
@@ -3292,7 +3365,7 @@ for (
     ) {
 
       throw new Error(
-        `电脑本地没有可用于兜底的 MP3：${track.title}`
+        `没有找到可用于同步的本地 MP3：${track.title}`
       );
 
     }
@@ -3320,7 +3393,7 @@ for (
     ) {
 
       throw new Error(
-        `电脑本地没有可用于兜底的封面：${track.title}`
+        `没有找到可用于同步的本地封面：${track.title}`
       );
 
     }

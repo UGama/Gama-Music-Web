@@ -135,7 +135,7 @@ export async function previewVideo() {
 
   if (!getApiBase()) {
     setStatus(
-      'Web 版不能直接从 Bilibili 下载。请使用本地 MP3 导入，或以后连接 Mac 服务。',
+      'Web 版不能直接从 Bilibili 下载。请使用本地 MP3 导入，或以后连接同步服务。',
       'warning'
     );
     return;
@@ -195,7 +195,7 @@ export async function startDownload(event) {
   event.preventDefault();
   if (!getApiBase()) {
     setStatus(
-      'Web 版不能直接下载 Bilibili MP3。请使用本地 MP3 导入，或连接 Mac 服务。',
+      'Web 版不能直接下载 Bilibili MP3。请使用本地 MP3 导入，或连接同步服务。',
       'warning'
     );
     return;
@@ -302,7 +302,7 @@ async function completeDesktopTransfer(
   ) {
 
     console.warn(
-      '封面没有成功保存，暂时保留 Desktop 临时文件：',
+      '封面没有成功保存，暂时保留服务端临时文件：',
       track.title
     );
 
@@ -332,7 +332,7 @@ async function completeDesktopTransfer(
      * 多留了一份临时文件。
      */
     console.warn(
-      'Desktop 临时文件清理失败：',
+      '服务端临时文件清理失败：',
       track.title,
       error
     );
@@ -584,7 +584,7 @@ export function pollJob(jobId) {
 
           setStatus(
             existingTrack
-              ? `歌曲已存在于 Desktop，并已保存到 Web 本地：${existingTrack.title}`
+              ? `歌曲已存在于主音乐库，并已保存到本地：${existingTrack.title}`
               : '歌曲已经存在。',
             'info',
             100
