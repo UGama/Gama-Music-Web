@@ -1,6 +1,12 @@
 // 二维码同步会话、音频/封面上传、接收、确认及取消。
 import {
-  getOfflineTrack, putOfflineTrack, deleteOfflineTrack, getAllOfflineTracks, cacheLibrary, putStoredData,
+  getOfflineTrack,
+  putOfflineTrack,
+  deleteOfflineTrack,
+  getOfflineTrackFileStates,
+  findMissingOfflineTrackFiles,
+  cacheLibrary,
+  putStoredData,
   getStoredData,
   deleteStoredData
 } from '../storage/storage.js';
@@ -532,8 +538,10 @@ async function waitForIncomingSyncTrackReady(
         session.status || '',
         preparation.status || '',
         preparation.completed || 0,
+        preparation.total || 0,
         preparation.failed || 0,
-        session.bufferedTrackCount || 0
+        session.bufferedTrackCount || 0,
+        session.bufferLimit || 10
       ].join('|');
 
 
@@ -545,8 +553,38 @@ async function waitForIncomingSyncTrackReady(
       lastSignature =
         signature;
 
+
       lastProgressAt =
         Date.now();
+
+
+      const nextMessage =
+        `电脑准备中 ` +
+        `${preparation.completed || 0}` +
+        ` / ` +
+        `${preparation.total || 0}` +
+        ` · 缓冲 ` +
+        `${session.bufferedTrackCount || 0}` +
+        ` / ` +
+        `${session.bufferLimit || 10}`;
+
+
+      /*
+       * 只有显示内容真的变化，
+       * 才重新绘制下载管理器。
+       */
+      if (
+        state.incomingSyncMessage !==
+        nextMessage
+      ) {
+
+        state.incomingSyncMessage =
+          nextMessage;
+
+
+        refreshDownloadManagerUi();
+
+      }
 
     }
 
@@ -562,20 +600,6 @@ async function waitForIncomingSyncTrackReady(
       );
 
     }
-
-
-    state.incomingSyncMessage =
-      `电脑准备中 ` +
-      `${preparation.completed || 0}` +
-      ` / ` +
-      `${preparation.total || 0}` +
-      ` · 缓冲 ` +
-      `${session.bufferedTrackCount || 0}` +
-      ` / ` +
-      `${session.bufferLimit || 10}`;
-
-
-    refreshDownloadManagerUi();
 
 
     await new Promise(
@@ -688,6 +712,97 @@ function buildIncomingSyncPlaylists(
 
 }
 
+function incomingTrackMetadataMatches(
+  existingTrack,
+  nextTrack
+) {
+
+  if (
+    !existingTrack ||
+    !nextTrack
+  ) {
+
+    return false;
+
+  }
+
+
+  return (
+    String(
+      existingTrack.id || ''
+    ) ===
+    String(
+      nextTrack.id || ''
+    ) &&
+
+    String(
+      existingTrack.title || ''
+    ) ===
+    String(
+      nextTrack.title || ''
+    ) &&
+
+    String(
+      existingTrack.originalTitle || ''
+    ) ===
+    String(
+      nextTrack.originalTitle || ''
+    ) &&
+
+    String(
+      existingTrack.sourceKey || ''
+    ) ===
+    String(
+      nextTrack.sourceKey || ''
+    ) &&
+
+    JSON.stringify(
+      existingTrack.source || null
+    ) ===
+    JSON.stringify(
+      nextTrack.source || null
+    ) &&
+
+    Number(
+      existingTrack.duration || 0
+    ) ===
+    Number(
+      nextTrack.duration || 0
+    ) &&
+
+    String(
+      existingTrack.uploader || ''
+    ) ===
+    String(
+      nextTrack.uploader || ''
+    ) &&
+
+    String(
+      existingTrack.createdAt || ''
+    ) ===
+    String(
+      nextTrack.createdAt || ''
+    ) &&
+
+    String(
+      existingTrack.updatedAt || ''
+    ) ===
+    String(
+      nextTrack.updatedAt || ''
+    ) &&
+
+    existingTrack.localOnly ===
+    nextTrack.localOnly &&
+
+    String(
+      existingTrack.cover || ''
+    ) ===
+    String(
+      nextTrack.cover || ''
+    )
+  );
+
+}
 
 async function cacheIncomingSyncProgress(
   playlists,
@@ -727,7 +842,8 @@ async function cacheIncomingSyncProgress(
 async function downloadIncomingSyncSnapshot(
   invite,
   manifest,
-  missing
+  missing,
+  existingFileStatesById = null
 ) {
 
   const tracks =
@@ -740,6 +856,24 @@ async function downloadIncomingSyncSnapshot(
     Array.isArray(manifest?.playlists)
       ? manifest.playlists
       : [];
+
+  /*
+* 正常情况下，
+* 上一步预检查已经把 IndexedDB
+* 扫描结果传进来了。
+*
+* 这里保留 fallback，
+* 防止以后有其他代码直接调用此函数。
+*/
+  const localFileStatesById =
+    existingFileStatesById
+      instanceof Map
+      ? existingFileStatesById
+      : (
+        await scanIncomingSyncLocalFiles(
+          manifest
+        )
+      ).fileStatesById;
 
   const missingAudioTrackIds =
     new Set(
@@ -782,8 +916,11 @@ async function downloadIncomingSyncSnapshot(
   const incomingTracks = [];
 
   let downloadedAudioCount = 0;
+  let downloadedCoverCount = 0;
   let reusedAudioCount = 0;
+  let metadataUpdatedCount = 0;
   let removedTrackCount = 0;
+  let unchangedTrackCount = 0;
 
   /*
  * 真正需要传输的歌曲。
@@ -805,6 +942,7 @@ async function downloadIncomingSyncSnapshot(
 
   let completedPendingTrackCount =
     0;
+
 
 
   /*
@@ -914,6 +1052,55 @@ async function downloadIncomingSyncSnapshot(
 
     };
 
+  const renderIncomingSyncFinalizing =
+    () => {
+
+      state.incomingSyncProgress =
+        100;
+
+
+      state.incomingSyncMessage =
+        '正在确认同步结果…';
+
+
+      refreshDownloadManagerUi();
+
+
+      if (
+        !els.modalBody ||
+        els.modal.classList.contains(
+          'hidden'
+        ) ||
+        els.modal.dataset.context !==
+        'incoming-sync'
+      ) {
+
+        return;
+
+      }
+
+
+      els.modalBody.innerHTML = `
+      <p>
+        <strong>
+          正在确认同步结果
+        </strong>
+      </p>
+
+      <p class="settings-note">
+        正在整理音乐库并检查歌曲和封面是否完整保存。
+      </p>
+
+      <progress
+        max="100"
+      ></progress>
+
+      <p class="settings-note">
+        请稍候，这一步不会重新下载歌曲。
+      </p>
+    `;
+
+    };
 
   renderIncomingSyncProgress();
 
@@ -944,10 +1131,12 @@ async function downloadIncomingSyncSnapshot(
 
 
 
-    const existing =
-      await getOfflineTrack(
+    const existingState =
+      localFileStatesById.get(
         trackId
-      );
+      ) ||
+      null;
+
 
     const needsPipelineTransfer =
       missingAudioTrackIds.has(
@@ -958,23 +1147,91 @@ async function downloadIncomingSyncSnapshot(
       );
 
 
+    /*
+     * 手机端自己的歌曲 metadata。
+     */
+    const mobileTrack = {
+      ...track,
+
+      localOnly: true,
+
+      cover:
+        track.hasCover
+          ? 'local-cover'
+          : null
+    };
+
+
+    const metadataChanged =
+      !incomingTrackMetadataMatches(
+        existingState?.track,
+        mobileTrack
+      );
+
+    /*
+ * 手机原本已经有这首 MP3，
+ * 但电脑端歌曲资料发生变化。
+ *
+ * 新下载的歌曲不算“更新资料”。
+ */
+    if (
+      existingState?.hasAudio &&
+      metadataChanged
+    ) {
+
+      metadataUpdatedCount +=
+        1;
+
+    }
+
+
+    /*
+     * 统计原来已经存在的 MP3。
+     *
+     * 不需要为了统计去读取完整 Blob。
+     */
+    if (
+      existingState?.hasAudio
+    ) {
+
+      reusedAudioCount +=
+        1;
+
+    }
+
+
+    /*
+     * 文件完整，metadata 也完全没变。
+     *
+     * 直接跳过。
+     * 这里甚至不需要调用 getOfflineTrack()。
+     */
+    if (
+      !needsPipelineTransfer &&
+      !metadataChanged
+    ) {
+
+      unchangedTrackCount +=
+        1;
+
+
+      incomingTracks.push(
+        mobileTrack
+      );
+
+
+      continue;
+
+    }
+
+
     if (
       needsPipelineTransfer
     ) {
 
-      /*
-       * UI 一首真正需要同步的歌
-       * 只更新一次。
-       *
-       * 已经存在的歌曲完全静默跳过。
-       */
       renderIncomingSyncProgress(
         true
       );
-
-    }
-    if (needsPipelineTransfer) {
-
 
 
       await waitForIncomingSyncTrackReady(
@@ -983,9 +1240,22 @@ async function downloadIncomingSyncSnapshot(
       );
 
     }
+
+
     /*
-     * 手机已经有 MP3 就直接复用，
-     * 不重复下载。
+     * 只有真正需要更新这一首时，
+     * 才读取完整 MP3 / 封面 record。
+     */
+    const existing =
+      existingState
+        ? await getOfflineTrack(
+          trackId
+        )
+        : null;
+
+
+    /*
+     * 手机已经有 MP3 就直接复用。
      */
     let audioBlob =
       existing?.blob?.size
@@ -993,14 +1263,7 @@ async function downloadIncomingSyncSnapshot(
         : null;
 
 
-    if (audioBlob) {
-
-      reusedAudioCount += 1;
-
-    }
-
     if (!audioBlob) {
-
 
       const audioResponse =
         await fetch(
@@ -1039,6 +1302,8 @@ async function downloadIncomingSyncSnapshot(
 
       audioBlob =
         await audioResponse.blob();
+
+
       throwIfIncomingSyncCancelled();
 
 
@@ -1048,17 +1313,17 @@ async function downloadIncomingSyncSnapshot(
           '收到的 MP3 文件为空。'
         );
 
-
       }
-      downloadedAudioCount += 1;
+
+
+      downloadedAudioCount +=
+        1;
 
     }
 
 
     /*
-     * 有封面时：
-     * 已经有就复用，
-     * 没有才从后台下载。
+     * 已有封面直接复用。
      */
     let coverBlob =
       track.hasCover &&
@@ -1110,10 +1375,18 @@ async function downloadIncomingSyncSnapshot(
       coverBlob =
         await coverResponse.blob();
 
+
       throwIfIncomingSyncCancelled();
+
+
       if (!coverBlob.size) {
 
         coverBlob = null;
+
+      } else {
+
+        downloadedCoverCount +=
+          1;
 
       }
 
@@ -1121,28 +1394,11 @@ async function downloadIncomingSyncSnapshot(
 
 
     /*
-     * 手机端自己的歌曲 metadata。
-     */
-    const mobileTrack = {
-      ...track,
-
-      localOnly: true,
-
-      cover:
-        track.hasCover
-          ? 'local-cover'
-          : null
-    };
-
-
-
-
-    /*
      * MP3 + 封面真正写进
      * 手机 IndexedDB。
      */
     throwIfIncomingSyncCancelled();
-    await putOfflineTrack({
+    const savedRecord = {
       ...(existing || {}),
 
       trackId,
@@ -1168,7 +1424,38 @@ async function downloadIncomingSyncSnapshot(
 
       updatedAt:
         new Date().toISOString()
-    });
+    };
+
+
+    await putOfflineTrack(
+      savedRecord
+    );
+
+
+    /*
+     * IndexedDB 保存成功以后，
+     * 内存里的扫描结果也同步更新。
+     */
+    localFileStatesById.set(
+      trackId,
+      {
+        trackId,
+
+        hasAudio:
+          Boolean(
+            audioBlob?.size
+          ),
+
+        hasCover:
+          Boolean(
+            track.hasCover &&
+            coverBlob?.size
+          ),
+
+        track:
+          mobileTrack
+      }
+    );
 
     /*
  * 只有 IndexedDB 保存成功后
@@ -1231,6 +1518,17 @@ async function downloadIncomingSyncSnapshot(
 
   }
 
+  /*
+ * 真正需要传输的歌曲已经全部完成。
+ *
+ * 后面进入：
+ * - 删除电脑主库已经不存在的旧歌曲
+ * - 更新播放列表
+ * - 保存最终 library
+ * - 重新检查 IndexedDB
+ * - 通知 Desktop 清理临时文件
+ */
+  renderIncomingSyncFinalizing();
 
   /*
  * 电脑 Web 是主音乐库。
@@ -1251,20 +1549,18 @@ async function downloadIncomingSyncSnapshot(
     );
 
 
-  const oldPhoneRecords =
-    await getAllOfflineTracks();
-
-
+  /*
+ * localRecordsById 已经包含
+ * 同步开始时手机上的所有记录，
+ * 同步过程中新增 / 更新的记录
+ * 也已经同步写回这个 Map。
+ *
+ * 所以这里不用再次扫描 IndexedDB。
+ */
   for (
-    const record
-    of oldPhoneRecords
+    const oldTrackId
+    of localFileStatesById.keys()
   ) {
-
-    const oldTrackId =
-      String(
-        record?.trackId || ''
-      );
-
 
     if (
       !oldTrackId ||
@@ -1281,7 +1577,10 @@ async function downloadIncomingSyncSnapshot(
     await deleteOfflineTrack(
       oldTrackId
     );
-    removedTrackCount += 1;
+
+
+    removedTrackCount +=
+      1;
 
 
     /*
@@ -1295,6 +1594,7 @@ async function downloadIncomingSyncSnapshot(
     ) {
 
       els.audio.pause();
+
 
       els.audio.removeAttribute(
         'src'
@@ -1314,6 +1614,7 @@ async function downloadIncomingSyncSnapshot(
 
       state.activeObjectUrl =
         '';
+
 
       state.currentTrackId =
         null;
@@ -1413,14 +1714,20 @@ async function downloadIncomingSyncSnapshot(
 
     downloadedAudioCount,
 
+    downloadedCoverCount,
+
     reusedAudioCount,
+
+    metadataUpdatedCount,
+
+    unchangedTrackCount,
 
     removedTrackCount
 
   };
 }
 
-async function findIncomingSyncMissing(
+async function scanIncomingSyncLocalFiles(
   manifest
 ) {
 
@@ -1432,11 +1739,29 @@ async function findIncomingSyncMissing(
       : [];
 
 
+  /*
+   * 使用游标逐条检查 IndexedDB。
+   *
+   * Map 里只保留：
+   * - trackId
+   * - hasAudio
+   * - hasCover
+   * - metadata
+   *
+   * 不长期保留整库 MP3 / 封面 Blob。
+   */
+  const fileStatesById =
+    await getOfflineTrackFileStates();
+
+
   const audioTrackIds = [];
   const coverTrackIds = [];
 
 
-  for (const track of tracks) {
+  for (
+    const track
+    of tracks
+  ) {
 
     const trackId =
       String(
@@ -1449,19 +1774,15 @@ async function findIncomingSyncMissing(
     }
 
 
-    const record =
-      await getOfflineTrack(
+    const fileState =
+      fileStatesById.get(
         trackId
-      );
+      ) ||
+      null;
 
 
-    /*
-     * 没有真正的 MP3 Blob：
-     * 手机缺这首歌。
-     */
     if (
-      !(record?.blob instanceof Blob) ||
-      !record.blob.size
+      !fileState?.hasAudio
     ) {
 
       audioTrackIds.push(
@@ -1471,16 +1792,9 @@ async function findIncomingSyncMissing(
     }
 
 
-    /*
-     * 电脑清单说这首有封面，
-     * 但手机没有真正的 cover Blob。
-     */
     if (
       track.hasCover &&
-      (
-        !(record?.coverBlob instanceof Blob) ||
-        !record.coverBlob.size
-      )
+      !fileState?.hasCover
     ) {
 
       coverTrackIds.push(
@@ -1493,9 +1807,38 @@ async function findIncomingSyncMissing(
 
 
   return {
-    audioTrackIds,
-    coverTrackIds
+
+    missing: {
+      audioTrackIds,
+      coverTrackIds
+    },
+
+    fileStatesById
+
   };
+
+}
+
+
+/*
+ * 最终完整性检查仍然可以
+ * 只取得 missing。
+ */
+async function findIncomingSyncMissing(
+  manifest
+) {
+
+  const tracks =
+    Array.isArray(
+      manifest?.tracks
+    )
+      ? manifest.tracks
+      : [];
+
+
+  return findMissingOfflineTrackFiles(
+    tracks
+  );
 
 }
 
@@ -2021,14 +2364,80 @@ export async function openIncomingSyncPreview() {
         : [];
 
     /*
+* 第一阶段：
+* 先检查手机真正已经保存的
+* MP3 和封面。
+*
+* 这里不显示百分比，
+* 因为还不知道最终需要同步多少首。
+*/
+    openModal({
+
+      title:
+        '手机同步',
+
+      context:
+        'incoming-sync',
+
+      primaryText:
+        '检查中…',
+
+      showCancel:
+        false,
+
+      body: `
+    <p>
+      <strong>
+        正在检查手机文件
+      </strong>
+    </p>
+
+    <p class="settings-note">
+      正在检查手机已有的歌曲和封面…
+    </p>
+
+    <progress
+      max="100"
+    ></progress>
+
+    <p class="settings-note">
+      检查完成后，只会同步缺少的内容。
+    </p>
+  `,
+
+      onPrimary:
+        async () => { }
+
+    });
+
+
+    els.modalPrimaryButton.disabled =
+      true;
+    /*
 * 先检查手机自己的 IndexedDB，
 * 不再假设所有歌曲都需要下载。
 */
-    const missing =
-      await findIncomingSyncMissing(
+    const localScan =
+      await scanIncomingSyncLocalFiles(
         manifest
       );
 
+
+    const missing =
+      localScan.missing;
+
+
+    const existingFileStatesById =
+      localScan.fileStatesById;
+    const pendingTrackCount =
+      new Set([
+        ...missing.audioTrackIds,
+        ...missing.coverTrackIds
+      ]).size;
+
+
+    const filesAlreadyComplete =
+      pendingTrackCount === 0;
 
     const existingAudioCount =
       tracks.length -
@@ -2058,8 +2467,9 @@ export async function openIncomingSyncPreview() {
         'incoming-sync',
 
       primaryText:
-        '开始同步',
-
+        filesAlreadyComplete
+          ? '完成同步'
+          : '开始同步',
       cancelText:
         '取消',
 
@@ -2112,10 +2522,27 @@ export async function openIncomingSyncPreview() {
       )}
         </p>
 
-        <p class="settings-note">
-          开始更新后，只会下载手机缺少的歌曲和封面。
-          播放列表将更新为电脑 Web 当前的版本。
-        </p>
+        ${filesAlreadyComplete
+          ? `
+    <p>
+      <strong>
+        歌曲和封面已经完整
+      </strong>
+    </p>
+
+    <p class="settings-note">
+      不需要重新下载音乐文件。
+      完成同步后只会更新歌曲信息、播放列表，
+      并清理电脑主库中已经不存在的手机歌曲。
+    </p>
+  `
+          : `
+    <p class="settings-note">
+      开始更新后，只会下载手机缺少的歌曲和封面。
+      播放列表将更新为电脑 Web 当前的版本。
+    </p>
+  `
+        }
       `,
 
       onPrimary:
@@ -2149,7 +2576,9 @@ export async function openIncomingSyncPreview() {
 
 
           state.incomingSyncMessage =
-            '正在准备需要同步的歌曲……';
+            filesAlreadyComplete
+              ? '正在更新音乐库…'
+              : '正在准备需要同步的歌曲……';
 
 
           refreshDownloadManagerUi();
@@ -2160,7 +2589,9 @@ export async function openIncomingSyncPreview() {
 
 
           els.modalPrimaryButton.textContent =
-            '同步进行中…';
+            filesAlreadyComplete
+              ? '正在完成…'
+              : '同步进行中…';
 
 
           els.modalPrimaryButton.disabled =
@@ -2213,7 +2644,8 @@ export async function openIncomingSyncPreview() {
               await downloadIncomingSyncSnapshot(
                 invite,
                 manifest,
-                missing
+                missing,
+                existingFileStatesById
               );
 
             state.incomingSyncProgress =
@@ -2253,12 +2685,38 @@ export async function openIncomingSyncPreview() {
       ${syncResult.downloadedAudioCount}
       首
     </p>
+    <p class="settings-note">
+  新下载封面：
+  ${syncResult.downloadedCoverCount}
+  个
+</p>
 
     <p class="settings-note">
-      手机原有：
-      ${syncResult.reusedAudioCount}
+  复用已有 MP3：
+  ${syncResult.reusedAudioCount}
+  首
+</p>
+${syncResult.unchangedTrackCount
+                  ? `
+    <p class="settings-note">
+      完全跳过：
+      ${syncResult.unchangedTrackCount}
       首
     </p>
+  `
+                  : ''
+                }
+
+${syncResult.metadataUpdatedCount
+                  ? `
+    <p class="settings-note">
+      更新歌曲资料：
+      ${syncResult.metadataUpdatedCount}
+      首
+    </p>
+  `
+                  : ''
+                }
 
     ${syncResult.removedTrackCount
                   ? `
@@ -2400,11 +2858,34 @@ function isSyncSessionReady(
 
 }
 
+
+
 async function watchPhoneSyncLocalUploads(
   sessionId,
   tracks
 ) {
+  const setSyncLocalUploadStatus =
+    (message) => {
 
+      const statusElement =
+        $('#syncLocalUploadStatus');
+
+
+      if (
+        !statusElement ||
+        statusElement.textContent ===
+        message
+      ) {
+
+        return;
+
+      }
+
+
+      statusElement.textContent =
+        message;
+
+    };
   const trackById =
     new Map(
       tracks.map(
@@ -2427,6 +2908,7 @@ async function watchPhoneSyncLocalUploads(
     new Set();
 
 
+
   const deadline =
     Date.now() +
     15 * 60 * 1000;
@@ -2447,9 +2929,6 @@ async function watchPhoneSyncLocalUploads(
         }
       );
 
-
-    const statusElement =
-      $('#syncLocalUploadStatus');
 
 
     /*
@@ -2484,12 +2963,9 @@ async function watchPhoneSyncLocalUploads(
       )
     ) {
 
-      if (statusElement) {
-
-        statusElement.textContent =
-          '手机需要的同步文件已经全部准备完成。';
-
-      }
+      setSyncLocalUploadStatus(
+        '手机需要的同步文件已经全部准备完成。'
+      );
 
 
       return;
@@ -2556,21 +3032,29 @@ async function watchPhoneSyncLocalUploads(
      * 2. Bilibili 下载失败的歌曲
      */
     const audioTrackIds =
-      [
-        ...new Set([
-          ...localAudioTrackIds,
-          ...fallbackAudioTrackIds
-        ])
-      ];
+      new Set([
+        ...localAudioTrackIds,
+        ...fallbackAudioTrackIds
+      ]);
 
 
     const coverTrackIds =
-      [
-        ...new Set([
-          ...localCoverTrackIds,
-          ...fallbackCoverTrackIds
-        ])
-      ];
+      new Set([
+        ...localCoverTrackIds,
+        ...fallbackCoverTrackIds
+      ]);
+
+
+    const fallbackAudioTrackIdSet =
+      new Set(
+        fallbackAudioTrackIds
+      );
+
+
+    const fallbackCoverTrackIdSet =
+      new Set(
+        fallbackCoverTrackIds
+      );
 
 
     const requestedTrackIds =
@@ -2593,12 +3077,9 @@ async function watchPhoneSyncLocalUploads(
       !requestedTrackIds.length
     ) {
 
-      if (statusElement) {
-
-        statusElement.textContent =
-          '正在准备手机需要的歌曲……';
-
-      }
+      setSyncLocalUploadStatus(
+        '正在准备手机需要的歌曲……'
+      );
 
 
       await new Promise(
@@ -2646,7 +3127,7 @@ async function watchPhoneSyncLocalUploads(
 
 
       const needsAudio =
-        audioTrackIds.includes(
+        audioTrackIds.has(
           trackId
         ) &&
         !uploadedAudio.has(
@@ -2655,7 +3136,7 @@ async function watchPhoneSyncLocalUploads(
 
 
       const needsCover =
-        coverTrackIds.includes(
+        coverTrackIds.has(
           trackId
         ) &&
         !uploadedCovers.has(
@@ -2680,22 +3161,19 @@ async function watchPhoneSyncLocalUploads(
 
 
       const isFallback =
-        fallbackAudioTrackIds.includes(
+        fallbackAudioTrackIdSet.has(
           trackId
         ) ||
-        fallbackCoverTrackIds.includes(
+        fallbackCoverTrackIdSet.has(
           trackId
         );
 
 
-      if (statusElement) {
-
-        statusElement.textContent =
-          isFallback
-            ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
-            : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`;
-
-      }
+      setSyncLocalUploadStatus(
+        isFallback
+          ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
+          : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
+      );
 
 
       if (needsAudio) {
@@ -2774,16 +3252,13 @@ async function watchPhoneSyncLocalUploads(
   }
 
 
-  const statusElement =
-    $('#syncLocalUploadStatus');
 
 
-  if (statusElement) {
 
-    statusElement.textContent =
-      '同步会话已超时，请重新生成二维码。';
 
-  }
+  setSyncLocalUploadStatus(
+    '同步会话已超时，请重新生成二维码。'
+  );
 
 }
 
@@ -3283,10 +3758,18 @@ export async function resumeIncomingSync() {
    * 而是以真正存在的 MP3 / 封面
    * 作为最终事实来源。
    */
-  const missing =
-    await findIncomingSyncMissing(
+  const localScan =
+    await scanIncomingSyncLocalFiles(
       manifest
     );
+
+
+  const missing =
+    localScan.missing;
+
+
+  const existingFileStatesById =
+    localScan.fileStatesById;
 
 
   const completedAudioCount =
@@ -3378,7 +3861,8 @@ export async function resumeIncomingSync() {
       await downloadIncomingSyncSnapshot(
         invite,
         manifest,
-        missing
+        missing,
+        existingFileStatesById
       );
 
 
