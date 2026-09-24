@@ -541,28 +541,18 @@ async function waitForIncomingSyncTrackReady(
         )
         : null;
 
-    if (preparationDetail) {
-      const hasServiceProgress =
-        Number.isInteger(preparation.completed) &&
-        preparation.completed >= 0 &&
-        Number.isInteger(preparation.total) &&
-        preparation.total > 0 &&
-        preparation.completed <= preparation.total;
-      const hasBufferProgress =
-        Number.isInteger(session.bufferedTrackCount) &&
-        session.bufferedTrackCount >= 0 &&
-        Number.isInteger(session.bufferLimit) &&
-        session.bufferLimit > 0;
-      const detailText = hasServiceProgress
-        ? `准备歌曲 · ${preparation.completed} / ${preparation.total}` +
-          (hasBufferProgress
-            ? ` · 缓冲 ${session.bufferedTrackCount} / ${session.bufferLimit}`
-            : '')
-        : '准备歌曲';
+    const hasServiceProgress =
+      Number.isInteger(preparation.completed) &&
+      preparation.completed >= 0 &&
+      Number.isInteger(preparation.total) &&
+      preparation.total > 0 &&
+      preparation.completed <= preparation.total;
+    const detailText = hasServiceProgress
+      ? `准备中 · ${preparation.completed} / ${preparation.total}`
+      : '准备中';
 
-      if (preparationDetail.textContent !== detailText) {
-        preparationDetail.textContent = detailText;
-      }
+    if (preparationDetail && preparationDetail.textContent !== detailText) {
+      preparationDetail.textContent = detailText;
     }
 
 
@@ -592,14 +582,7 @@ async function waitForIncomingSyncTrackReady(
 
 
       const nextMessage =
-        `正在准备 ` +
-        `${preparation.completed || 0}` +
-        ` / ` +
-        `${preparation.total || 0}` +
-        ` · 缓冲 ` +
-        `${session.bufferedTrackCount || 0}` +
-        ` / ` +
-        `${session.bufferLimit || 10}`;
+        detailText;
 
 
       /*
@@ -1019,6 +1002,10 @@ async function downloadIncomingSyncSnapshot(
         );
 
 
+      const visibleStage =
+        stage === '准备歌曲' ? '准备中' : '传输中';
+
+
       state.incomingSyncProgress =
         percent;
 
@@ -1035,7 +1022,7 @@ async function downloadIncomingSyncSnapshot(
       ) {
 
         state.incomingSyncMessage =
-          `${stage || '正在处理'} · ` +
+          `${visibleStage} · ` +
           `${currentNumber} / ${pendingTrackCount}`;
 
       } else {
@@ -1101,7 +1088,7 @@ async function downloadIncomingSyncSnapshot(
             overflow: hidden;
             text-overflow: ellipsis;
           "
-        >${escapeHtml(stage || '处理歌曲')}</p>
+        >${visibleStage}</p>
 
         <p
           class="settings-note"
@@ -1122,7 +1109,7 @@ async function downloadIncomingSyncSnapshot(
           : `
       <p class="settings-note">
         ${pendingTrackCount
-            ? '准备处理下一首歌曲…'
+            ? '准备中'
             : '歌曲和封面都已经存在，正在完成最后整理。'
           }
       </p>
@@ -1178,16 +1165,6 @@ async function downloadIncomingSyncSnapshot(
   ></progress>
 
   <div style="margin-top: 18px;">
-    <p
-      class="settings-note"
-      style="
-        margin: 0 0 4px;
-        font-size: 14px;
-      "
-    >
-      当前步骤
-    </p>
-
     <p
       style="
         margin: 0 0 6px;
