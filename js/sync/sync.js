@@ -953,7 +953,11 @@ async function downloadIncomingSyncSnapshot(
    * 不计入 0 → 100%。
    */
   const renderIncomingSyncProgress =
-    (working = false) => {
+    (
+      working = false,
+      currentTrack = null,
+      stage = ''
+    ) => {
 
       const percent =
         pendingTrackCount
@@ -963,6 +967,23 @@ async function downloadIncomingSyncSnapshot(
             100
           )
           : 100;
+
+
+      const currentNumber =
+        pendingTrackCount
+          ? Math.min(
+            completedPendingTrackCount + 1,
+            pendingTrackCount
+          )
+          : 0;
+
+
+      const currentTitle =
+        String(
+          currentTrack?.title ||
+          currentTrack?.originalTitle ||
+          '未命名歌曲'
+        );
 
 
       state.incomingSyncProgress =
@@ -981,11 +1002,8 @@ async function downloadIncomingSyncSnapshot(
       ) {
 
         state.incomingSyncMessage =
-          `正在同步 · ` +
-          `${Math.min(
-            completedPendingTrackCount + 1,
-            pendingTrackCount
-          )} / ${pendingTrackCount}`;
+          `${stage || '正在处理'} · ` +
+          `${currentNumber} / ${pendingTrackCount}`;
 
       } else {
 
@@ -1000,12 +1018,6 @@ async function downloadIncomingSyncSnapshot(
       refreshDownloadManagerUi();
 
 
-      /*
-       * 同步弹窗保持固定结构。
-       * 不再显示歌曲标题，
-       * 避免一行 / 两行 / 三行
-       * 导致整个窗口不断跳动。
-       */
       if (
         !els.modalBody ||
         els.modal.classList.contains(
@@ -1032,7 +1044,7 @@ async function downloadIncomingSyncSnapshot(
 
       <p>
         ${pendingTrackCount
-          ? `${completedPendingTrackCount} / ${pendingTrackCount}`
+          ? `已完成 ${completedPendingTrackCount} / ${pendingTrackCount}`
           : '无需下载新文件'
         }
       </p>
@@ -1040,14 +1052,60 @@ async function downloadIncomingSyncSnapshot(
       <progress
         max="100"
         value="${percent}"
+        style="
+          width: 100%;
+          display: block;
+        "
       ></progress>
 
-      <p class="settings-note">
-        ${pendingTrackCount
-          ? '手机已有内容已自动跳过，只处理缺少的歌曲或封面。'
-          : '歌曲和封面都已经存在，正在完成最后整理。'
+      ${working && pendingTrackCount
+          ? `
+          <p
+            class="settings-note"
+            style="margin-bottom: 4px;"
+          >
+            正在处理
+            ${currentNumber} /
+            ${pendingTrackCount}
+          </p>
+
+          <p
+            style="
+              margin-top: 0;
+              margin-bottom: 6px;
+            "
+          >
+            <strong>
+              ${escapeHtml(
+            stage ||
+            '正在处理歌曲…'
+          )}
+            </strong>
+          </p>
+
+          <p
+            class="settings-note"
+            style="
+              margin-top: 0;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            "
+          >
+            ${escapeHtml(
+            currentTitle
+          )}
+          </p>
+        `
+          : `
+          <p class="settings-note">
+            ${pendingTrackCount
+            ? '准备处理下一首歌曲…'
+            : '歌曲和封面都已经存在，正在完成最后整理。'
+          }
+          </p>
+        `
         }
-      </p>
     `;
 
     };
@@ -1230,7 +1288,9 @@ async function downloadIncomingSyncSnapshot(
     ) {
 
       renderIncomingSyncProgress(
-        true
+        true,
+        track,
+        '等待电脑准备歌曲…'
       );
 
 
@@ -1264,6 +1324,11 @@ async function downloadIncomingSyncSnapshot(
 
 
     if (!audioBlob) {
+      renderIncomingSyncProgress(
+        true,
+        track,
+        '正在下载 MP3…'
+      );
 
       const audioResponse =
         await fetch(
@@ -1337,6 +1402,13 @@ async function downloadIncomingSyncSnapshot(
       !coverBlob
     ) {
 
+      renderIncomingSyncProgress(
+        true,
+        track,
+        '正在下载封面…'
+      );
+
+
       const coverResponse =
         await fetch(
           `${invite.server}` +
@@ -1393,6 +1465,11 @@ async function downloadIncomingSyncSnapshot(
     }
 
 
+    renderIncomingSyncProgress(
+      true,
+      track,
+      '正在保存到手机…'
+    );
     /*
      * MP3 + 封面真正写进
      * 手机 IndexedDB。
