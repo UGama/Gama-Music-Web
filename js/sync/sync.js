@@ -554,11 +554,11 @@ async function waitForIncomingSyncTrackReady(
         Number.isInteger(session.bufferLimit) &&
         session.bufferLimit > 0;
       const detailText = hasServiceProgress
-        ? `服务进度 ${preparation.completed} / ${preparation.total}` +
+        ? `准备歌曲 · ${preparation.completed} / ${preparation.total}` +
           (hasBufferProgress
             ? ` · 缓冲 ${session.bufferedTrackCount} / ${session.bufferLimit}`
             : '')
-        : '同步服务正在准备…';
+        : '准备歌曲';
 
       if (preparationDetail.textContent !== detailText) {
         preparationDetail.textContent = detailText;
@@ -1066,19 +1066,10 @@ async function downloadIncomingSyncSnapshot(
 
 
       els.modalBody.innerHTML = `
-  <p>
-    <strong>
-      ${pendingTrackCount
-          ? '正在同步手机音乐'
-          : '正在整理手机音乐库'
-        }
-    </strong>
-  </p>
-
-  <p>
+  <p style="font-size: 18px; font-weight: 600;">
     ${pendingTrackCount
-          ? `正在处理 ${currentNumber} / ${pendingTrackCount}`
-          : '无需下载新文件'
+          ? `同步中 ${currentNumber} / ${pendingTrackCount}`
+          : '正在整理手机音乐库'
         }
   </p>
 
@@ -1099,50 +1090,24 @@ async function downloadIncomingSyncSnapshot(
         "
       >
         <p
-          class="settings-note"
-          style="
-            margin: 0 0 4px;
-            font-size: 14px;
-          "
-        >
-          当前步骤
-        </p>
-
-        <p
+          ${stage === '准备歌曲' ? 'data-incoming-sync-preparation' : ''}
           style="
             margin: 0 0 6px;
             font-size: 16px;
             font-weight: 600;
-          "
-        >
-          ${escapeHtml(
-            stage ||
-            '正在处理歌曲…'
-          )}
-        </p>
-
-        <p
-          class="settings-note"
-          ${stage === '正在准备歌曲…'
-            ? 'data-incoming-sync-preparation'
-            : 'aria-hidden="true"'}
-          style="
-            margin: 0 0 6px;
-            height: 1.5em;
             line-height: 1.5;
-            font-size: 13px;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            visibility: ${stage === '正在准备歌曲…' ? 'visible' : 'hidden'};
           "
-        >${stage === '正在准备歌曲…' ? '同步服务正在准备…' : ''}</p>
+        >${escapeHtml(stage || '处理歌曲')}</p>
 
         <p
           class="settings-note"
           style="
             margin: 0;
+            font-size: 13px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1371,7 +1336,7 @@ async function downloadIncomingSyncSnapshot(
       renderIncomingSyncProgress(
         true,
         track,
-        '正在准备歌曲…'
+        '准备歌曲'
       );
 
 
@@ -1408,7 +1373,7 @@ async function downloadIncomingSyncSnapshot(
       renderIncomingSyncProgress(
         true,
         track,
-        '正在下载 MP3…'
+        '下载 MP3'
       );
 
       const audioResponse =
@@ -1492,7 +1457,7 @@ async function downloadIncomingSyncSnapshot(
       renderIncomingSyncProgress(
         true,
         track,
-        '正在下载封面…'
+        '下载封面'
       );
 
 
@@ -1561,7 +1526,7 @@ async function downloadIncomingSyncSnapshot(
     renderIncomingSyncProgress(
       true,
       track,
-      '正在保存到手机…'
+      '保存到本机'
     );
     /*
      * MP3 + 封面真正写进
