@@ -785,6 +785,137 @@ async function downloadIncomingSyncSnapshot(
   let reusedAudioCount = 0;
   let removedTrackCount = 0;
 
+  /*
+ * 真正需要传输的歌曲。
+ *
+ * 一首歌无论是缺 MP3、
+ * 缺封面，还是两个都缺，
+ * 都只算一个同步任务。
+ */
+  const pendingTrackIds =
+    new Set([
+      ...missingAudioTrackIds,
+      ...missingCoverTrackIds
+    ]);
+
+
+  const pendingTrackCount =
+    pendingTrackIds.size;
+
+
+  let completedPendingTrackCount =
+    0;
+
+
+  /*
+   * 只根据“真正需要同步的歌曲”
+   * 计算进度。
+   *
+   * 已经存在于手机的歌曲
+   * 不计入 0 → 100%。
+   */
+  const renderIncomingSyncProgress =
+    (working = false) => {
+
+      const percent =
+        pendingTrackCount
+          ? Math.round(
+            completedPendingTrackCount /
+            pendingTrackCount *
+            100
+          )
+          : 100;
+
+
+      state.incomingSyncProgress =
+        percent;
+
+
+      if (
+        !pendingTrackCount
+      ) {
+
+        state.incomingSyncMessage =
+          '无需下载 · 正在整理音乐库';
+
+      } else if (
+        working
+      ) {
+
+        state.incomingSyncMessage =
+          `正在同步 · ` +
+          `${Math.min(
+            completedPendingTrackCount + 1,
+            pendingTrackCount
+          )} / ${pendingTrackCount}`;
+
+      } else {
+
+        state.incomingSyncMessage =
+          `同步进度 · ` +
+          `${completedPendingTrackCount} / ` +
+          `${pendingTrackCount}`;
+
+      }
+
+
+      refreshDownloadManagerUi();
+
+
+      /*
+       * 同步弹窗保持固定结构。
+       * 不再显示歌曲标题，
+       * 避免一行 / 两行 / 三行
+       * 导致整个窗口不断跳动。
+       */
+      if (
+        !els.modalBody ||
+        els.modal.classList.contains(
+          'hidden'
+        ) ||
+        els.modal.dataset.context !==
+        'incoming-sync'
+      ) {
+
+        return;
+
+      }
+
+
+      els.modalBody.innerHTML = `
+      <p>
+        <strong>
+          ${pendingTrackCount
+          ? '正在同步手机音乐'
+          : '正在整理手机音乐库'
+        }
+        </strong>
+      </p>
+
+      <p>
+        ${pendingTrackCount
+          ? `${completedPendingTrackCount} / ${pendingTrackCount}`
+          : '无需下载新文件'
+        }
+      </p>
+
+      <progress
+        max="100"
+        value="${percent}"
+      ></progress>
+
+      <p class="settings-note">
+        ${pendingTrackCount
+          ? '手机已有内容已自动跳过，只处理缺少的歌曲或封面。'
+          : '歌曲和封面都已经存在，正在完成最后整理。'
+        }
+      </p>
+    `;
+
+    };
+
+
+  renderIncomingSyncProgress();
 
   for (
     let index = 0;
@@ -809,85 +940,9 @@ async function downloadIncomingSyncSnapshot(
     }
 
 
-    const showIncomingSyncStage =
-      (stage) => {
-
-        const percent =
-          tracks.length
-            ? Math.round(
-              (
-                (index + 1) /
-                tracks.length
-              ) * 100
-            )
-            : 100;
 
 
-        state.incomingSyncProgress =
-          Math.max(
-            0,
-            Math.min(
-              100,
-              percent
-            )
-          );
 
-
-        state.incomingSyncMessage =
-          `${stage} · ` +
-          (
-            track.title ||
-            '未命名歌曲'
-          );
-
-
-        refreshDownloadManagerUi();
-
-
-        if (
-          !els.modalBody ||
-          els.modal.classList.contains(
-            'hidden'
-          ) ||
-          els.modal.dataset.context !==
-          'incoming-sync'
-        ) {
-
-          return;
-
-        }
-
-
-        els.modalBody.innerHTML = `
-          <p>
-            <strong>
-              ${escapeHtml(stage)}
-            </strong>
-          </p>
-
-          <p>
-            ${index + 1} / ${tracks.length}
-          </p>
-
-          <progress
-            max="100"
-            value="${percent}"
-          ></progress>
-
-          <p class="settings-note">
-            ${escapeHtml(
-          track.title ||
-          '未命名歌曲'
-        )}
-          </p>
-        `;
-
-      };
-
-
-    showIncomingSyncStage(
-      '正在检查手机本地文件……'
-    );
 
     const existing =
       await getOfflineTrack(
@@ -903,11 +958,23 @@ async function downloadIncomingSyncSnapshot(
       );
 
 
+    if (
+      needsPipelineTransfer
+    ) {
+
+      /*
+       * UI 一首真正需要同步的歌
+       * 只更新一次。
+       *
+       * 已经存在的歌曲完全静默跳过。
+       */
+      renderIncomingSyncProgress(
+        true
+      );
+
+    }
     if (needsPipelineTransfer) {
 
-      showIncomingSyncStage(
-        '正在等待电脑准备……'
-      );
 
 
       await waitForIncomingSyncTrackReady(
@@ -934,9 +1001,7 @@ async function downloadIncomingSyncSnapshot(
 
     if (!audioBlob) {
 
-      showIncomingSyncStage(
-        '正在下载 MP3……'
-      );
+
       const audioResponse =
         await fetch(
           `${invite.server}` +
@@ -1007,9 +1072,6 @@ async function downloadIncomingSyncSnapshot(
       !coverBlob
     ) {
 
-      showIncomingSyncStage(
-        '正在下载封面……'
-      );
       const coverResponse =
         await fetch(
           `${invite.server}` +
@@ -1072,9 +1134,7 @@ async function downloadIncomingSyncSnapshot(
           : null
     };
 
-    showIncomingSyncStage(
-      '正在保存到手机……'
-    );
+
 
 
     /*
@@ -1119,9 +1179,7 @@ async function downloadIncomingSyncSnapshot(
  */
     if (needsPipelineTransfer) {
 
-      showIncomingSyncStage(
-        '正在确认保存……'
-      );
+
 
 
       await acknowledgeIncomingSyncTrackReceived(
@@ -1147,6 +1205,29 @@ async function downloadIncomingSyncSnapshot(
       playlists,
       incomingTracks
     );
+    /*
+ * 只有真正缺文件的歌曲
+ * 才推进同步进度。
+ *
+ * 而且必须等：
+ *
+ * MP3 / 封面保存
+ * + Desktop ACK
+ * + library checkpoint
+ *
+ * 全部完成以后才算这一首完成。
+ */
+    if (
+      needsPipelineTransfer
+    ) {
+
+      completedPendingTrackCount +=
+        1;
+
+
+      renderIncomingSyncProgress();
+
+    }
 
   }
 
@@ -3243,22 +3324,31 @@ export async function resumeIncomingSync() {
     true;
 
 
+  const pendingTrackCount =
+    new Set([
+      ...missing.audioTrackIds,
+      ...missing.coverTrackIds
+    ]).size;
+
+
+  /*
+   * 恢复同步也重新以
+   * “这次还需要同步多少首”
+   * 作为新的 0 → 100%。
+   *
+   * 已经成功完成的旧内容
+   * 不占本次进度。
+   */
   state.incomingSyncProgress =
-    tracks.length
-      ? Math.round(
-        (
-          completedAudioCount /
-          tracks.length
-        ) *
-        100
-      )
-      : 0;
+    pendingTrackCount
+      ? 0
+      : 100;
 
 
   state.incomingSyncMessage =
-    `正在恢复同步 · ` +
-    `${completedAudioCount} / ` +
-    `${tracks.length}`;
+    pendingTrackCount
+      ? `正在恢复同步 · 待同步 ${pendingTrackCount} 首`
+      : '正在确认同步结果';
 
 
   refreshDownloadManagerUi();
