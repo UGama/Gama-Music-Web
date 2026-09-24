@@ -783,9 +783,8 @@ function bindEvents() {
     suspendIncomingSyncOnExit
   );
 
-  document.addEventListener(
-    'visibilitychange',
-    () => {
+  const resumeIncomingSyncSafely =
+    async () => {
 
       if (
         document.hidden
@@ -794,19 +793,77 @@ function bindEvents() {
       }
 
 
-      resumeIncomingSync()
-        .catch(
-          (error) => {
+      try {
 
-            console.warn(
-              '回到前台后恢复手机同步失败：',
-              error
-            );
+        /*
+         * 第一次调用有可能拿到的是
+         * 锁屏前尚未完全退出的旧恢复任务。
+         *
+         * 先等它真正退出并释放 Promise 锁。
+         */
+        await resumeIncomingSync();
 
-          }
+
+        /*
+         * 如果页面仍然在前台，
+         * 而同步仍然没有重新启动，
+         * 再尝试一次。
+         *
+         * 如果第一次调用本来就已经成功恢复，
+         * resumeIncomingSync() 内部状态会避免
+         * 启动第二个同步任务。
+         */
+        if (
+          !document.hidden &&
+          !state.incomingSyncActive
+        ) {
+
+          await resumeIncomingSync();
+
+        }
+
+      } catch (error) {
+
+        console.warn(
+          '回到前台后恢复手机同步失败：',
+          error
         );
 
+      }
+
+    };
+
+
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+
+      if (
+        document.hidden
+      ) {
+
+        suspendIncomingSyncOnExit();
+
+        return;
+
+      }
+
+
+      resumeIncomingSyncSafely();
+
     }
+  );
+
+
+  window.addEventListener(
+    'pageshow',
+    resumeIncomingSyncSafely
+  );
+
+
+  window.addEventListener(
+    'focus',
+    resumeIncomingSyncSafely
   );
 
   els.previewButton.addEventListener('click', previewVideo);
