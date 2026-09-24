@@ -1,3 +1,7 @@
+import {
+  state,
+  storageKeys
+} from './state.js';
 // Service Worker 注册、版本检测和安全更新。
 
 
@@ -8,6 +12,8 @@ let waitingWorker =
 let reloading =
   false;
 
+let pendingUpdateTimer =
+  null;
 
 /*
  * 向指定 Service Worker
@@ -136,6 +142,211 @@ async function updateCurrentVersionInfo() {
 
 }
 
+function hasActiveDownload() {
+
+  /*
+   * 手机播放列表下载。
+   */
+  const playlistDownloadActive =
+    Array.from(
+      state.playlistSaveJobs?.values?.() || []
+    )
+      .some(
+        (job) =>
+          job?.active
+      );
+
+
+  /*
+   * Bilibili 单曲 / 收藏夹
+   * 后台导入任务。
+   */
+  const bilibiliDownloadActive =
+    Boolean(
+      localStorage.getItem(
+        storageKeys.downloadJobId
+      ) ||
+      localStorage.getItem(
+        storageKeys.favoriteJobId
+      )
+    );
+
+
+  return (
+    playlistDownloadActive ||
+    state.mobileDownloadResumeBusy ||
+    bilibiliDownloadActive
+  );
+
+}
+
+
+function isPlayingAudio() {
+
+  const audio =
+    document.getElementById(
+      'audio'
+    );
+
+
+  return Boolean(
+    audio &&
+    !audio.paused &&
+    !audio.ended
+  );
+
+}
+
+
+function isBusyForUpdate() {
+
+  return (
+    isPlayingAudio() ||
+    hasActiveDownload() ||
+    state.incomingSyncActive
+  );
+
+}
+
+
+function hideUpdateBanner() {
+
+  const banner =
+    document.getElementById(
+      'pwaUpdateBanner'
+    );
+
+
+  if (
+    banner
+  ) {
+
+    banner.hidden =
+      true;
+
+  }
+
+}
+
+
+function activateWaitingWorker() {
+
+  if (
+    !waitingWorker
+  ) {
+
+    return false;
+
+  }
+
+
+  if (
+    pendingUpdateTimer
+  ) {
+
+    window.clearInterval(
+      pendingUpdateTimer
+    );
+
+
+    pendingUpdateTimer =
+      null;
+
+  }
+
+
+  const button =
+    document.getElementById(
+      'pwaUpdateButton'
+    );
+
+
+  if (
+    button
+  ) {
+
+    button.hidden =
+      true;
+
+  }
+
+
+  const versionText =
+    document.getElementById(
+      'pwaUpdateVersion'
+    );
+
+
+  if (
+    versionText
+  ) {
+
+    versionText.textContent =
+      '正在更新…';
+
+  }
+
+
+  waitingWorker.postMessage({
+    type:
+      'SKIP_WAITING'
+  });
+
+
+  return true;
+
+}
+
+
+function watchUntilSafeToUpdate() {
+
+  if (
+    pendingUpdateTimer
+  ) {
+
+    return;
+
+  }
+
+
+  pendingUpdateTimer =
+    window.setInterval(
+      () => {
+
+        if (
+          !waitingWorker
+        ) {
+
+          window.clearInterval(
+            pendingUpdateTimer
+          );
+
+
+          pendingUpdateTimer =
+            null;
+
+
+          return;
+
+        }
+
+
+        if (
+          isBusyForUpdate()
+        ) {
+
+          return;
+
+        }
+
+
+        activateWaitingWorker();
+
+      },
+      2000
+    );
+
+}
 
 /*
  * 显示“有新版本”提示。
@@ -149,6 +360,7 @@ async function showUpdateAvailable(
   ) {
 
     return;
+
   }
 
 
@@ -156,6 +368,25 @@ async function showUpdateAvailable(
     worker;
 
 
+  /*
+   * 没有播放 / 下载 / 同步：
+   * 直接自动切换到新版。
+   */
+  if (
+    !isBusyForUpdate()
+  ) {
+
+    activateWaitingWorker();
+
+    return;
+
+  }
+
+
+  /*
+   * 当前有重要任务：
+   * 先继续旧版本。
+   */
   const banner =
     document.getElementById(
       'pwaUpdateBanner'
@@ -174,23 +405,20 @@ async function showUpdateAvailable(
     );
 
 
-  if (
-    !banner ||
-    !button
-  ) {
-
-    console.info(
-      'Gama Music 有新版本可用。'
-    );
-
-    return;
-  }
-
-
   const version =
     await getWorkerVersion(
       worker
     );
+
+
+  if (
+    banner
+  ) {
+
+    banner.hidden =
+      false;
+
+  }
 
 
   if (
@@ -199,50 +427,26 @@ async function showUpdateAvailable(
 
     versionText.textContent =
       version
-        ? `v${version}`
-        : '';
+        ? `v${version} · 将在当前任务结束后自动更新`
+        : '将在当前任务结束后自动更新';
 
   }
 
 
-  banner.hidden =
-    false;
+  /*
+   * 不再要求用户手动更新。
+   */
+  if (
+    button
+  ) {
+
+    button.hidden =
+      true;
+
+  }
 
 
-  button.disabled =
-    false;
-
-
-  button.textContent =
-    '立即更新';
-
-
-  button.onclick =
-    () => {
-
-      if (
-        !waitingWorker
-      ) {
-
-        return;
-      }
-
-
-      button.disabled =
-        true;
-
-
-      button.textContent =
-        '正在更新…';
-
-
-      waitingWorker
-        .postMessage({
-          type:
-            'SKIP_WAITING'
-        });
-
-    };
+  watchUntilSafeToUpdate();
 
 }
 
@@ -334,6 +538,11 @@ export async function registerServiceWorker() {
         reloading =
           true;
 
+        waitingWorker =
+          null;
+
+
+        hideUpdateBanner();
 
         window.location.reload();
 
@@ -391,6 +600,44 @@ export async function registerServiceWorker() {
      * 显示当前运行版本。
      */
     updateCurrentVersionInfo();
+    const audio =
+      document.getElementById(
+        'audio'
+      );
+
+
+    audio?.addEventListener(
+      'pause',
+      () => {
+
+        if (
+          waitingWorker &&
+          !isBusyForUpdate()
+        ) {
+
+          activateWaitingWorker();
+
+        }
+
+      }
+    );
+
+
+    audio?.addEventListener(
+      'ended',
+      () => {
+
+        if (
+          waitingWorker &&
+          !isBusyForUpdate()
+        ) {
+
+          activateWaitingWorker();
+
+        }
+
+      }
+    );
 
 
     /*
@@ -399,7 +646,7 @@ export async function registerServiceWorker() {
     registration
       .update()
       .catch(
-        () => {}
+        () => { }
       );
 
 
@@ -423,7 +670,7 @@ export async function registerServiceWorker() {
           registration
             .update()
             .catch(
-              () => {}
+              () => { }
             );
 
         }
@@ -440,7 +687,7 @@ export async function registerServiceWorker() {
         registration
           .update()
           .catch(
-            () => {}
+            () => { }
           );
 
       },

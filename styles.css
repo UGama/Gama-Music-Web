@@ -3431,7 +3431,10 @@ input[type="range"] {
 
 
   #playAllButton {
-    min-width: 116px;
+    min-width: 0;
+    width: auto;
+    padding-left: 18px;
+    padding-right: 18px;
   }
 
 }
