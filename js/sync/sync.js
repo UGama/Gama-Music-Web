@@ -543,15 +543,8 @@ async function waitForIncomingSyncTrackReady(
         )
         : null;
 
-    const hasServiceProgress =
-      Number.isInteger(preparation.completed) &&
-      preparation.completed >= 0 &&
-      Number.isInteger(preparation.total) &&
-      preparation.total > 0 &&
-      preparation.completed <= preparation.total;
-    const detailText = hasServiceProgress
-      ? `准备中 · ${preparation.completed} / ${preparation.total}`
-      : '准备中';
+    const detailText =
+      '歌曲准备中：';
 
     if (preparationDetail && preparationDetail.textContent !== detailText) {
       preparationDetail.textContent = detailText;
@@ -1005,7 +998,9 @@ async function downloadIncomingSyncSnapshot(
 
 
       const visibleStage =
-        stage === '准备歌曲' ? '准备中' : '传输中';
+        stage === '准备歌曲'
+          ? '歌曲准备中：'
+          : '传输中';
 
 
       state.incomingSyncProgress =
