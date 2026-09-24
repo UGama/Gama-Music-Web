@@ -5,7 +5,8 @@ import {
   playTrack,
   renderPlayer,
   renderModeButtons,
-  setMode
+  setMode,
+  restoreLastPlayback
 } from './player/player.js';
 import { visibleLibraryTracks } from './library/library.js';
 import { getSelectedPlaylist, selectPlaylist, createLocalPlaylist, renamePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist } from './library/playlists.js';
@@ -932,6 +933,7 @@ function bindEvents() {
 
     }
   );
+
   $('#shuffleAllButton')
     ?.addEventListener(
       'click',
