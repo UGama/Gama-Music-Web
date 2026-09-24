@@ -34,7 +34,7 @@ async function uploadSyncTrackAudio(
   ) {
 
     throw new Error(
-      '没有找到这首歌的本地 MP3。'
+      '没有找到这首歌的可用文件。'
     );
 
   }
@@ -106,7 +106,7 @@ async function uploadSyncTrackAudio(
     } catch {
 
       throw new Error(
-        '同步服务返回了无法识别的数据。'
+        '同步过程中出现异常，请稍后重试。'
       );
 
     }
@@ -135,9 +135,8 @@ async function uploadSyncTrackAudio(
 
     throw new Error(
       data?.error ||
-      `MP3 上传失败：${response.status}`
+      '歌曲传输失败，请稍后重试。'
     );
-
   }
 
 
@@ -223,7 +222,7 @@ async function uploadSyncTrackCover(
     } catch {
 
       throw new Error(
-        '同步服务返回了无法识别的数据。'
+        '同步过程中出现异常，请稍后重试。'
       );
 
     }
@@ -252,7 +251,7 @@ async function uploadSyncTrackCover(
 
     throw new Error(
       data?.error ||
-      `封面上传失败：${response.status}`
+      '封面传输失败，请稍后重试。'
     );
 
   }
@@ -421,10 +420,8 @@ async function completeIncomingSync(
   if (!response.ok) {
 
     throw new Error(
-      data?.error ||
-      `确认同步完成失败：${response.status}`
+      '同步暂时无法完成，请稍后重试。'
     );
-
   }
 
 
@@ -482,10 +479,8 @@ async function waitForIncomingSyncTrackReady(
     if (!response.ok) {
 
       throw new Error(
-        data?.error ||
-        `检查同步状态失败：${response.status}`
+        '暂时无法获取同步状态，请稍后重试。'
       );
-
     }
 
 
@@ -674,8 +669,7 @@ async function acknowledgeIncomingSyncTrackReceived(
   if (!response.ok) {
 
     throw new Error(
-      data?.error ||
-      `确认歌曲保存失败：${response.status}`
+      '歌曲同步出现异常，请稍后重试。'
     );
 
   }
@@ -1382,7 +1376,7 @@ async function downloadIncomingSyncSnapshot(
       if (!audioResponse.ok) {
 
         throw new Error(
-          `下载 MP3 失败：${audioResponse.status} `
+          '歌曲接收失败，请稍后重试。'
         );
 
       }
@@ -1398,7 +1392,7 @@ async function downloadIncomingSyncSnapshot(
       if (!audioBlob.size) {
 
         throw new Error(
-          '收到的 MP3 文件为空。'
+          '歌曲接收不完整，请稍后重试。'
         );
 
       }
@@ -1464,7 +1458,7 @@ async function downloadIncomingSyncSnapshot(
       if (!coverResponse.ok) {
 
         throw new Error(
-          `下载封面失败：${coverResponse.status} `
+          '封面接收失败，请稍后重试。'
         );
 
       }
@@ -1777,7 +1771,7 @@ async function downloadIncomingSyncSnapshot(
   ) {
 
     throw new Error(
-      '同步文件还没有完整保存到手机，暂时不会清理后台文件。'
+      '同步内容还没有完整保存，请稍后重试。'
     );
 
   }
@@ -2003,7 +1997,7 @@ async function reportIncomingSyncMissing(
     } catch {
 
       throw new Error(
-        '后台返回的缺失清单结果无法识别。'
+        '同步过程中出现异常，请稍后重试。'
       );
 
     }
@@ -2014,8 +2008,7 @@ async function reportIncomingSyncMissing(
   if (!response.ok) {
 
     throw new Error(
-      data?.error ||
-      `报告缺失歌曲失败：${response.status} `
+      '无法继续同步，请稍后重试。'
     );
 
   }
@@ -2257,8 +2250,7 @@ async function cancelIncomingSyncOnServer(
 
 
     throw new Error(
-      data?.error ||
-      `停止同步失败：${response.status} `
+      '暂时无法停止同步。'
     );
 
   }
@@ -2425,19 +2417,18 @@ export async function openIncomingSyncPreview() {
       } catch {
 
         throw new Error(
-          '同步服务返回的数据无法识别。'
+          '同步过程中出现异常，请稍后重试。'
         );
 
       }
 
     }
 
-
     if (!response.ok) {
 
       throw new Error(
         data?.error ||
-        `同步连接失败：${response.status} `
+        '无法连接同步服务，请稍后重试。'
       );
 
     }
@@ -2567,7 +2558,7 @@ export async function openIncomingSyncPreview() {
     openModal({
 
       title:
-        '发现手机同步',
+        '手机同步',
 
       context:
         'incoming-sync',
@@ -2582,71 +2573,39 @@ export async function openIncomingSyncPreview() {
       showCancel:
         true,
       body: `
-  <p class="settings-note">
-    已成功连接 Gama Music 同步服务。
-        </p>
+  <p>
+    <strong>
+      ${tracks.length} 首歌曲
+    </strong>
+  </p>
 
-        <p>
+  <p class="settings-note">
+    ${playlists.length} 个歌单
+  </p>
+
+  ${filesAlreadyComplete
+          ? `
+        <p style="margin-top: 14px;">
           <strong>
-            ${tracks.length} 首歌曲
+            手机内容已经是最新版本
           </strong>
         </p>
 
-        <p>
-          ${playlists.length} 个歌单
-        </p>
-
         <p class="settings-note">
-  手机已有歌曲：
-  ${existingAudioCount}
-  /
-  ${tracks.length}
-</p>
-
-<p class="settings-note">
-  缺少歌曲：
-  ${missing.audioTrackIds.length}
-</p>
-
-<p class="settings-note">
-  手机已有封面：
-  ${existingCoverCount}
-  /
-  ${expectedCoverCount}
-</p>
-
-<p class="settings-note">
-  缺少封面：
-  ${missing.coverTrackIds.length}
-</p>
-
-        <p class="settings-note">
-          服务状态：
-          ${escapeHtml(
-        session.status || '未知'
-      )}
+          完成后将更新歌曲信息和播放列表。
         </p>
-
-        ${filesAlreadyComplete
-          ? `
-    <p>
-      <strong>
-        歌曲和封面已经完整
-      </strong>
-    </p>
-
-    <p class="settings-note">
-      不需要重新下载音乐文件。
-      完成同步后只会更新歌曲信息、播放列表，
-      并清理主音乐库中已经不存在的手机歌曲。
-    </p>
-  `
+      `
           : `
-    <p class="settings-note">
-      开始更新后，只会下载手机缺少的歌曲和封面。
-      播放列表将更新为主音乐库当前的版本。
-    </p>
-  `
+        <p style="margin-top: 14px;">
+          <strong>
+            需要更新 ${pendingTrackCount} 首歌曲
+          </strong>
+        </p>
+
+        <p class="settings-note">
+          只会同步手机缺少的内容。
+        </p>
+      `
         }
 `,
 
@@ -2711,7 +2670,7 @@ export async function openIncomingSyncPreview() {
 
 
           els.modalCancelButton.textContent =
-            '后台运行';
+            '在后台继续';
 
           try {
 
@@ -2777,69 +2736,31 @@ export async function openIncomingSyncPreview() {
 
               body: `
   <p>
-  <strong>
-    手机音乐已经更新完成。
-  </strong>
-    </p>
+    <strong>
+      手机音乐已经更新完成
+    </strong>
+  </p>
 
-    <p>
-      当前音乐库：
-      ${syncResult.totalTrackCount}
-      首
-    </p>
+  <p style="margin-top: 10px;">
+    当前音乐库：
+    ${syncResult.totalTrackCount}
+    首歌曲
+  </p>
 
-    <p class="settings-note">
-      新下载 MP3：
-      ${syncResult.downloadedAudioCount}
-      首
-    </p>
-    <p class="settings-note">
-  新下载封面：
-  ${syncResult.downloadedCoverCount}
-  个
-</p>
-
-    <p class="settings-note">
-  复用已有 MP3：
-  ${syncResult.reusedAudioCount}
-  首
-</p>
-${syncResult.unchangedTrackCount
+  ${syncResult.removedTrackCount
                   ? `
-    <p class="settings-note">
-      完全跳过：
-      ${syncResult.unchangedTrackCount}
-      首
-    </p>
-  `
+        <p class="settings-note">
+          已清理
+          ${syncResult.removedTrackCount}
+          首已从主音乐库删除的歌曲。
+        </p>
+      `
                   : ''
                 }
 
-${syncResult.metadataUpdatedCount
-                  ? `
-    <p class="settings-note">
-      更新歌曲资料：
-      ${syncResult.metadataUpdatedCount}
-      首
-    </p>
-  `
-                  : ''
-                }
-
-    ${syncResult.removedTrackCount
-                  ? `
-          <p class="settings-note">
-            已清理主音乐库中不存在的旧歌曲：
-            ${syncResult.removedTrackCount}
-            首
-          </p>
-        `
-                  : ''
-                }
-
-<p class="settings-note">
-  同步临时文件已经清理。
-</p>
+  <p class="settings-note">
+    歌曲、封面和播放列表都已完成更新。
+  </p>
 `,
 
               onPrimary:
@@ -3292,8 +3213,8 @@ async function watchPhoneSyncLocalUploads(
 
       setSyncLocalUploadStatus(
         isFallback
-          ? `Bilibili 下载失败，正在使用本地副本继续同步：${track.title}`
-          : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
+          ? `正在切换备用来源：${track.title}`
+          : `正在准备同步文件：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
       );
 
 
@@ -3305,7 +3226,7 @@ async function watchPhoneSyncLocalUploads(
         ) {
 
           throw new Error(
-            `没有找到可用于同步的本地 MP3：${track.title}`
+            `没有找到可用于同步的 MP3：${track.title}`
           );
 
         }
@@ -3333,7 +3254,7 @@ async function watchPhoneSyncLocalUploads(
         ) {
 
           throw new Error(
-            `没有找到可用于同步的本地封面：${track.title}`
+            `没有找到可用于同步的封面：${track.title}`
           );
 
         }
@@ -3372,13 +3293,8 @@ async function watchPhoneSyncLocalUploads(
 
   }
 
-
-
-
-
-
   setSyncLocalUploadStatus(
-    '同步会话已超时，请重新生成二维码。'
+    '同步已超时，请重新生成二维码。'
   );
 
 }
@@ -3401,9 +3317,9 @@ export async function createPhoneSyncSession() {
 
     resultBox.innerHTML = `
       <p class="settings-note">
-        请先设置共享后台地址。
+        当前无法连接同步服务，请稍后重试。
       </p>
-    `;
+`;
 
     return;
 
@@ -3414,10 +3330,10 @@ export async function createPhoneSyncSession() {
     true;
 
   resultBox.innerHTML = `
-    <p class="settings-note">
-      正在创建同步会话……
-    </p>
-  `;
+  <p class="settings-note">
+    正在准备手机同步……
+  </p>
+`;
 
 
   try {
@@ -3661,6 +3577,7 @@ export async function createPhoneSyncSession() {
 
   </div>
 `;
+
     const qrElement =
       $('#syncQrCode');
 
@@ -3705,7 +3622,7 @@ export async function createPhoneSyncSession() {
       (error) => {
 
         console.error(
-          '本地歌曲按需同步失败：',
+          '同步文件准备失败：',
           error
         );
 
@@ -3717,7 +3634,7 @@ export async function createPhoneSyncSession() {
         if (statusElement) {
 
           statusElement.textContent =
-            `本地歌曲发送失败：${error.message}`;
+            `同步文件准备失败：${error.message}`;
 
         }
 
