@@ -1,6 +1,12 @@
 import { getOfflineTrack, putOfflineTrack, deleteOfflineTrack, cacheLibrary } from './storage/storage.js';
 import { state, storageKeys } from './core/state.js';
-import { initPlayer, playTrack, renderPlayer, renderModeButtons, setMode } from './player/player.js';
+import {
+  initPlayer,
+  playTrack,
+  renderPlayer,
+  renderModeButtons,
+  setMode
+} from './player/player.js';
 import { visibleLibraryTracks } from './library/library.js';
 import { getSelectedPlaylist, selectPlaylist, createLocalPlaylist, renamePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist } from './library/playlists.js';
 import { initPlaylistView, renderPlaylists } from './ui/playlist-view.js';
@@ -21,6 +27,7 @@ import { openSettings } from './ui/settings.js';
 import { registerServiceWorker } from './core/pwa.js';
 import { stopQrScanner } from './sync/qr-scanner.js';
 import { initBackup } from './library/backup.js';
+
 
 function renderTrackCover(track) {
   const coverUrl =
@@ -925,6 +932,71 @@ function bindEvents() {
 
     }
   );
+  $('#shuffleAllButton')
+    ?.addEventListener(
+      'click',
+      async () => {
+
+        const visibleTracks =
+          visibleLibraryTracks(
+            els.searchInput.value
+          );
+
+
+        const playableIds =
+          visibleTracks
+            .filter(
+              (track) =>
+                state.serverConnected ||
+                state.offlineTrackIds.has(
+                  track.id
+                )
+            )
+            .map(
+              (track) =>
+                track.id
+            );
+
+
+        if (
+          !playableIds.length
+        ) {
+
+          setStatus(
+            '当前结果中没有可播放的歌曲。',
+            'warning'
+          );
+
+          return;
+
+        }
+
+
+        /*
+         * 点击“随机播放”后，
+         * 播放器模式强制变成 shuffle。
+         */
+        setMode(
+          'shuffle'
+        );
+
+
+        const randomId =
+          playableIds[
+          Math.floor(
+            Math.random() *
+            playableIds.length
+          )
+          ];
+
+
+        await playTrack(
+          randomId,
+          playableIds
+        );
+
+      }
+    );
 
   document.querySelectorAll('[data-view]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -990,7 +1062,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerServiceWorker();
   startSleepTimerMonitor();
   await refreshOfflineState();
+
   await loadLibrary();
+
+
+  await restoreLastPlayback()
+    .catch(
+      (error) => {
+
+        console.warn(
+          '恢复上次播放位置失败：',
+          error
+        );
+
+      }
+    );
+
+
   restoreMobileDownloadFailures();
   /*
  * 手机重新打开以后，

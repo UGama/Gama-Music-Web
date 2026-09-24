@@ -19,7 +19,7 @@ let els = null;
 let getMediaUrl = null;
 let getTrackCoverUrl = null;
 
-
+let lastPlaybackSavedAt = 0;
 let showStatus = null;
 
 
@@ -137,6 +137,165 @@ function queueForContext(
   );
 }
 
+function playableLibraryIds() {
+
+  return sortedLibraryTracks()
+    .map(
+      (track) =>
+        track.id
+    )
+    .filter(
+      (id) => {
+
+        return (
+          state.serverConnected ||
+          state.offlineTrackIds.has(
+            id
+          )
+        );
+
+      }
+    );
+
+}
+
+
+function randomTrackId(
+  ids
+) {
+
+  if (
+    !ids.length
+  ) {
+
+    return null;
+
+  }
+
+
+  return ids[
+    Math.floor(
+      Math.random() *
+      ids.length
+    )
+  ];
+
+}
+
+
+function readLastPlayback() {
+
+  try {
+
+    const raw =
+      localStorage.getItem(
+        storageKeys.lastPlayback
+      );
+
+
+    if (
+      !raw
+    ) {
+
+      return null;
+
+    }
+
+
+    const saved =
+      JSON.parse(
+        raw
+      );
+
+
+    if (
+      !saved?.trackId
+    ) {
+
+      return null;
+
+    }
+
+
+    return saved;
+
+  } catch {
+
+    return null;
+
+  }
+
+}
+
+
+function savePlaybackState(
+  force = false
+) {
+
+  if (
+    !state.currentTrackId ||
+    !els?.audio
+  ) {
+
+    return;
+
+  }
+
+
+  const now =
+    Date.now();
+
+
+  /*
+   * timeupdate 会非常频繁，
+   * 不需要每 0.2 秒写 localStorage。
+   */
+  if (
+    !force &&
+    now -
+    lastPlaybackSavedAt <
+    2000
+  ) {
+
+    return;
+
+  }
+
+
+  lastPlaybackSavedAt =
+    now;
+
+
+  const currentTime =
+    Number.isFinite(
+      els.audio.currentTime
+    )
+      ? els.audio.currentTime
+      : 0;
+
+
+  localStorage.setItem(
+    storageKeys.lastPlayback,
+
+    JSON.stringify({
+      trackId:
+        state.currentTrackId,
+
+      currentTime,
+
+      queue:
+        Array.isArray(
+          state.queue
+        )
+          ? state.queue
+          : [],
+
+      savedAt:
+        now
+    })
+  );
+
+}
 
 /* =========================================================
    播放
@@ -144,8 +303,21 @@ function queueForContext(
 
 export async function playTrack(
   trackId,
-  context = 'library'
+  context = 'library',
+  options = {}
 ) {
+  const autoplay =
+    options.autoplay !==
+    false;
+
+
+  const startTime =
+    Math.max(
+      0,
+      Number(
+        options.startTime
+      ) || 0
+    );
 
   const track =
     state.library.tracks.find(
@@ -262,6 +434,91 @@ export async function playTrack(
 
   els.audio.load();
 
+  /*
+ * 恢复上次播放进度。
+ */
+  if (
+    startTime > 0
+  ) {
+
+    const restoreTime =
+      () => {
+
+        let nextTime =
+          startTime;
+
+
+        if (
+          Number.isFinite(
+            els.audio.duration
+          ) &&
+          els.audio.duration > 0
+        ) {
+
+          nextTime =
+            Math.min(
+              startTime,
+              Math.max(
+                0,
+                els.audio.duration -
+                0.5
+              )
+            );
+
+        }
+
+
+        els.audio.currentTime =
+          nextTime;
+
+
+        updateProgress();
+
+      };
+
+
+    if (
+      els.audio.readyState >=
+      1
+    ) {
+
+      restoreTime();
+
+    } else {
+
+      els.audio.addEventListener(
+        'loadedmetadata',
+        restoreTime,
+        {
+          once:
+            true
+        }
+      );
+
+    }
+
+  }
+
+
+  /*
+   * 新歌曲一旦装入播放器，
+   * 就记住它。
+   */
+  savePlaybackState(
+    true
+  );
+
+
+  renderPlayer();
+
+
+  if (
+    !autoplay
+  ) {
+
+    return;
+
+  }
 
   try {
 
@@ -280,34 +537,185 @@ export async function playTrack(
    播放 / 暂停
    ========================================================= */
 
-async function togglePlayPause() {
+async function startInitialPlayback() {
+
+  const ids =
+    playableLibraryIds();
+
 
   if (
-    !state.currentTrackId &&
-    state.library.tracks[0]
+    !ids.length
   ) {
 
-    await playTrack(
-      state.library.tracks[0].id
+    throw new Error(
+      '当前没有可以播放的歌曲。'
     );
 
-    return;
   }
 
+
+  /*
+   * 初始状态：
+   *
+   * shuffle → 随机一首
+   *
+   * loop / one → 当前排序第一首
+   */
+  const trackId =
+    state.mode ===
+      'shuffle'
+      ? randomTrackId(
+        ids
+      )
+      : ids[0];
+
+
+  await playTrack(
+    trackId,
+    ids
+  );
+
+}
+
+
+async function playFromPlayer() {
+
+  /*
+   * 完全没有当前歌曲：
+   * 按播放器模式启动。
+   */
+  if (
+    !state.currentTrackId
+  ) {
+
+    await startInitialPlayback();
+
+    return;
+
+  }
+
+
+  /*
+   * 已经恢复了上次播放位置，
+   * 或只是普通暂停状态：
+   * 直接继续。
+   */
+  await els.audio.play();
+
+
+  renderPlayer();
+
+}
+
+
+async function togglePlayPause() {
 
   if (
     els.audio.paused
   ) {
 
-    await els.audio.play();
+    await playFromPlayer();
 
   } else {
 
     els.audio.pause();
+
   }
 
 
   renderPlayer();
+
+}
+
+export async function restoreLastPlayback() {
+
+  const saved =
+    readLastPlayback();
+
+
+  if (
+    !saved
+  ) {
+
+    return false;
+
+  }
+
+
+  const track =
+    state.library.tracks.find(
+      (item) =>
+        item.id ===
+        saved.trackId
+    );
+
+
+  /*
+   * 上次歌曲已经被删除了。
+   */
+  if (
+    !track
+  ) {
+
+    localStorage.removeItem(
+      storageKeys.lastPlayback
+    );
+
+
+    return false;
+
+  }
+
+
+  /*
+   * 当前无法取得音频源时，
+   * 不强行恢复。
+   */
+  if (
+    !state.offlineTrackIds.has(
+      track.id
+    ) &&
+    !state.serverConnected
+  ) {
+
+    return false;
+
+  }
+
+
+  const queue =
+    Array.isArray(
+      saved.queue
+    )
+      ? saved.queue.filter(
+        (id) =>
+          state.library.tracks.some(
+            (item) =>
+              item.id === id
+          )
+      )
+      : [];
+
+
+  await playTrack(
+    track.id,
+
+    queue.length
+      ? queue
+      : 'library',
+
+    {
+      autoplay:
+        false,
+
+      startTime:
+        saved.currentTime
+    }
+  );
+
+
+  return true;
+
 }
 
 
@@ -825,7 +1233,7 @@ function configureMediaSessionActions() {
     play:
       run(
         () =>
-          els.audio.play()
+          playFromPlayer()
       ),
 
     pause:
@@ -966,13 +1374,27 @@ function bindPlayerEvents() {
 
   els.audio.addEventListener(
     'pause',
-    renderPlayer
+    () => {
+
+      savePlaybackState(
+        true
+      );
+
+      renderPlayer();
+
+    }
   );
 
 
   els.audio.addEventListener(
     'timeupdate',
-    updateProgress
+    () => {
+
+      updateProgress();
+
+      savePlaybackState();
+
+    }
   );
 
 
@@ -1053,6 +1475,21 @@ function bindPlayerEvents() {
 
 
       updateProgress();
+      savePlaybackState(
+        true
+      );
     }
   );
+
+  window.addEventListener(
+    'pagehide',
+    () => {
+
+      savePlaybackState(
+        true
+      );
+
+    }
+  );
+
 }

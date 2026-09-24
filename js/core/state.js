@@ -12,7 +12,9 @@ export const storageKeys = {
   mobileDownloadQueue: 'gamaMusic.mobileDownloadQueue',
   mobileDownloadPaused: 'gamaMusic.mobileDownloadPaused',
   mobileDownloadHistory: 'gamaMusic.mobileDownloadHistory',
-  mobileDownloadFailures: 'gamaMusic.mobileDownloadFailures'
+  mobileDownloadFailures: 'gamaMusic.mobileDownloadFailures',
+  lastPlayback:
+    'gamaMusic.lastPlayback'
 };
 
 
