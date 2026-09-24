@@ -3410,179 +3410,28 @@ input[type="range"] {
   opacity: 0.65;
 }
 
-/* =========================================
-   Apple Music 风格的音乐库操作区
-   ========================================= */
+@media (max-width: 719px) {
 
-.apple-library-toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-
-  width: 100%;
-}
+  #shuffleAllButton {
+    display: none;
+  }
 
 
-/*
- * 排序器弱化：
- * 不再做成一个巨大的独立按钮。
- */
-.apple-sort-control {
-  align-self: flex-start;
-
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-
-  min-height: 36px;
-
-  padding:
-    0 4px;
-
-  border: 0;
-  border-radius: 0;
-
-  background:
-    transparent;
-
-  box-shadow:
-    none;
-}
+  /*
+   * 手机上：
+   * 排序在左边，
+   * 播放按钮保持原来的蓝色主按钮。
+   */
+  .library-toolbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
 
 
-.apple-sort-control .sort-control-icon {
-  width: 17px;
-  height: 17px;
+  #playAllButton {
+    min-width: 116px;
+  }
 
-  fill:
-    none;
-
-  stroke:
-    currentColor;
-
-  stroke-width:
-    2;
-
-  stroke-linecap:
-    round;
-
-  stroke-linejoin:
-    round;
-
-  color:
-    #667085;
-}
-
-
-.apple-sort-control .track-sort-select {
-  appearance: auto;
-
-  border: 0;
-
-  padding:
-    0;
-
-  background:
-    transparent;
-
-  color:
-    #4b5563;
-
-  font-size:
-    15px;
-
-  font-weight:
-    600;
-
-  outline:
-    none;
-}
-
-
-/*
- * Apple Music 式：
- * 两个并排、同等级的播放按钮。
- */
-.apple-play-actions {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2,
-      minmax(0,
-        1fr));
-
-  gap: 10px;
-
-  width: 100%;
-}
-
-
-.apple-play-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-
-  min-width: 0;
-
-  height: 48px;
-
-  padding:
-    0 14px;
-
-  border:
-    0;
-
-  border-radius:
-    13px;
-
-  background:
-    #f1f2f6;
-
-  color:
-    #2463d8;
-
-  font:
-    inherit;
-
-  font-size:
-    15px;
-
-  font-weight:
-    700;
-
-  cursor:
-    pointer;
-
-  -webkit-tap-highlight-color:
-    transparent;
-
-  transition:
-    transform 0.12s ease,
-    background 0.12s ease;
-}
-
-
-.apple-play-action svg {
-  width:
-    18px;
-
-  height:
-    18px;
-
-  flex:
-    0 0 auto;
-
-  fill:
-    currentColor;
-}
-
-
-.apple-play-action:active {
-  transform:
-    scale(0.97);
-
-  background:
-    #e7e9ef;
 }
