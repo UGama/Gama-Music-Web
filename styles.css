@@ -844,6 +844,19 @@ input[type="range"] {
   box-shadow: var(--shadow);
 }
 
+@media (min-width: 720px) {
+
+  .modal.settings-modal {
+    place-items: center;
+  }
+
+  .modal.settings-modal .modal-panel {
+    max-height: min(calc(100vh - 64px),
+        760px);
+  }
+
+}
+
 .modal-heading {
   display: flex;
   align-items: center;
@@ -2285,27 +2298,6 @@ input[type="range"] {
   }
 }
 
-.advanced-settings {
-  margin-top: 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.advanced-settings summary {
-  padding: 13px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 760;
-  cursor: pointer;
-}
-
-.advanced-settings-body {
-  display: grid;
-  gap: 12px;
-  padding: 0 13px 13px;
-}
-
 .status-card {
   position: relative;
 }
@@ -2345,10 +2337,6 @@ input[type="range"] {
 }
 
 @media (max-width: 719px) {
-
-  body.mobile-player-mode .advanced-settings {
-    display: none !important;
-  }
 
   body.mobile-player-mode .settings-modal .modal-actions {
     display: none;

@@ -3559,26 +3559,7 @@ export async function createPhoneSyncSession() {
     let readySession =
       manifestResult.session;
 
-    /*
- * 本地导入的歌曲没有网络来源，
- * 所以暂时仍然在创建二维码时
- * 上传到 Desktop。
- *
- * Bilibili 歌曲只发送 manifest。
- */
-    const localTracks =
-      tracks.filter(
-        (track) =>
-          String(
-            track?.source?.type || ''
-          ).toLowerCase() ===
-          'local' ||
-          String(
-            track?.id || ''
-          ).startsWith(
-            'local-'
-          )
-      );
+
 
 
     try {
@@ -3628,106 +3609,58 @@ export async function createPhoneSyncSession() {
       }).toString();
 
     resultBox.innerHTML = `
-      <div class="settings-note">
-        <strong>同步码</strong>
-        <div
-          style="
-            margin-top: 8px;
-            padding: 12px;
-            border-radius: 10px;
-            background: rgba(0, 0, 0, 0.05);
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            word-break: break-all;
-            user-select: all;
-          "
-        >
-          ${escapeHtml(readySession.id)}
-        </div>
+  <div class="settings-note">
 
-        <p>
-          ${readySession.trackCount} 首歌曲 ·
-          ${readySession.playlistCount} 个歌单
-        </p>
+    <p>
+      <strong>
+        手机同步已准备好
+      </strong>
+    </p>
 
-        <p>
-  本地歌曲：
-${localTracks.length}
-首按需同步
-</p>
-<p>
-  Bilibili：
-  ${tracks.length - localTracks.length}
-  首按需同步
-</p>
-<p
-  id="syncLocalUploadStatus"
-  class="settings-note"
->
-  等待手机扫码……
-</p>
+    <p style="margin-top: 8px;">
+      ${readySession.trackCount} 首歌曲 ·
+      ${readySession.playlistCount} 个歌单
+    </p>
 
-<p>
-  状态：
-  ${isSyncSessionReady(
-      readySession
-    )
-        ? '可以发送到手机'
-        : '同步文件还没有准备完整'
-      }
-</p>
-<p>
-  <strong>
-    手机扫码更新
-  </strong>
-</p>
+    <p
+      id="syncLocalUploadStatus"
+      class="settings-note"
+      style="margin-top: 8px;"
+    >
+      等待手机扫码……
+    </p>
 
-<div
-  id="syncQrCode"
-  style="
-    width: 240px;
-    min-height: 240px;
-    margin: 12px auto;
-    padding: 10px;
-    background: white;
-    border-radius: 12px;
-  "
-></div>
-<p>
-  <strong>
-    手机同步测试链接
-  </strong>
-</p>
+    <p style="margin-top: 14px;">
+      使用手机扫描二维码开始同步
+    </p>
 
-<div
-  style="
-    padding: 10px;
-    border-radius: 10px;
-    background: rgba(0, 0, 0, 0.05);
-    word-break: break-all;
-    user-select: all;
-  "
->
-  ${escapeHtml(
-        syncInviteUrl.toString()
-      )}
-</div>
+    <div
+      id="syncQrCode"
+      style="
+        width: 240px;
+        min-height: 240px;
+        margin: 12px auto;
+        padding: 10px;
+        background: white;
+        border-radius: 12px;
+      "
+    ></div>
 
+    <p style="margin-bottom: 0;">
+      二维码有效至：
+      ${escapeHtml(
+      expiresAt.toLocaleTimeString(
+        [],
+        {
+          hour: '2-digit',
+          minute: '2-digit'
+        }
+      )
+    )}
+    </p>
 
-        <p style="margin-bottom: 0;">
-          有效至：
-          ${escapeHtml(
-        expiresAt.toLocaleTimeString(
-          [],
-          {
-            hour: '2-digit',
-            minute: '2-digit'
-          }
-        )
-      )}
-        </p>
-      </div>
-    `;
-
+  </div>
+`;
     const qrElement =
       $('#syncQrCode');
 

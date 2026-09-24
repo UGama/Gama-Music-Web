@@ -1,8 +1,11 @@
 // 设置弹窗与设置操作入口。
 import { storageKeys } from '../core/state.js';
-import { escapeHtml, formatBytes } from '../core/utils.js';
+import { formatBytes } from '../core/utils.js';
 import { isMobilePlayerMode, els, $, openModal } from './ui.js';
-import { getApiBase, getRelayAccessKey, getClientAccessToken, api } from '../core/api.js';
+import {
+  getClientAccessToken,
+  api
+} from '../core/api.js';
 import { loadLibrary, checkServerConnection } from '../library/library-service.js';
 import { exportGamaBackup, importGamaBackup, importLocalMp3Files } from '../library/backup.js';
 import { openPhoneQrScanner } from '../sync/qr-scanner.js';
@@ -10,20 +13,9 @@ import { createPhoneSyncSession } from '../sync/sync.js';
 
 export function openSettings() {
 
-  const current =
-    getApiBase();
-
-
-  const currentRelayAccessKey =
-    getRelayAccessKey();
-
-
   const currentClientAccessToken =
     getClientAccessToken();
 
-
-  const isHttpsPage =
-    location.protocol === 'https:';
 
 
   openModal({
@@ -32,7 +24,7 @@ export function openSettings() {
       'Gama Music 设置',
 
     primaryText:
-      '保存',
+      '关闭',
 
     body: `
 
@@ -187,139 +179,11 @@ export function openSettings() {
 >
   备份包含本地 MP3、封面、歌单和歌曲信息。
 </p>
-
-      <hr>
-
-
-            <details class="advanced-settings">
-
-        <summary>
-          高级设置
-        </summary>
-
-        <div class="advanced-settings-body">
-
-          <label class="field">
-
-            <span>
-              共享后台地址
-            </span>
-
-            <input
-              id="apiBaseInput"
-              type="url"
-              placeholder="可选"
-              value="${escapeHtml(current)}"
-            >
-
-          </label>
-
-
-          <p class="settings-note">
-            通常不需要修改。
-          </p>
-
-
-          ${isHttpsPage
-        ? `
-            <p class="settings-note">
-              当前页面使用 HTTPS。
-              后台地址也建议使用 HTTPS。
-            </p>
-          `
-        : ''
-      }
-
-
-          <label class="field">
-
-            <span>
-              后台访问密码
-            </span>
-
-            <input
-              id="relayAccessKeyInput"
-              type="password"
-              placeholder="可选"
-              autocomplete="off"
-              value="${escapeHtml(
-        currentRelayAccessKey
-      )}"
-            >
-
-          </label>
-
-
-          <p class="settings-note">
-            仅在需要修改共享后台连接时使用。
-          </p>
-
-        </div>
-
-      </details>
-
-
-
     `,
 
 
     onPrimary:
-      async () => {
-
-
-
-
-        const next =
-          $('#apiBaseInput')
-            .value
-            .trim()
-            .replace(/\/$/, '');
-
-
-        if (next) {
-
-          localStorage.setItem(
-            storageKeys.apiBase,
-            next
-          );
-
-        } else {
-
-          localStorage.removeItem(
-            storageKeys.apiBase
-          );
-
-        }
-
-
-        const nextRelayAccessKey =
-          $('#relayAccessKeyInput')
-            ?.value
-            .trim() ||
-          '';
-
-
-        if (nextRelayAccessKey) {
-
-          localStorage.setItem(
-            storageKeys.relayAccessKey,
-            nextRelayAccessKey
-          );
-
-        } else {
-
-          localStorage.removeItem(
-            storageKeys.relayAccessKey
-          );
-
-        }
-
-
-        await checkServerConnection();
-
-        await loadLibrary();
-
-      }
+      async () => { }
 
   });
 
