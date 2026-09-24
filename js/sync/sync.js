@@ -1033,80 +1033,87 @@ async function downloadIncomingSyncSnapshot(
 
 
       els.modalBody.innerHTML = `
-      <p>
-        <strong>
-          ${pendingTrackCount
+  <p>
+    <strong>
+      ${pendingTrackCount
           ? '正在同步手机音乐'
           : '正在整理手机音乐库'
         }
-        </strong>
-      </p>
+    </strong>
+  </p>
 
-      <p>
-        ${pendingTrackCount
-          ? `已完成 ${completedPendingTrackCount} / ${pendingTrackCount}`
+  <p>
+    ${pendingTrackCount
+          ? `正在处理 ${currentNumber} / ${pendingTrackCount}`
           : '无需下载新文件'
         }
-      </p>
+  </p>
 
-      <progress
-        max="100"
-        value="${percent}"
-        style="
-          width: 100%;
-          display: block;
-        "
-      ></progress>
+  <progress
+    max="100"
+    value="${percent}"
+    style="
+      width: 100%;
+      display: block;
+    "
+  ></progress>
 
-      ${working && pendingTrackCount
+  ${working && pendingTrackCount
           ? `
-          <p
-            class="settings-note"
-            style="margin-bottom: 4px;"
-          >
-            正在处理
-            ${currentNumber} /
-            ${pendingTrackCount}
-          </p>
+      <div
+        style="
+          margin-top: 18px;
+        "
+      >
+        <p
+          class="settings-note"
+          style="
+            margin: 0 0 4px;
+            font-size: 14px;
+          "
+        >
+          当前步骤
+        </p>
 
-          <p
-            style="
-              margin-top: 0;
-              margin-bottom: 6px;
-            "
-          >
-            <strong>
-              ${escapeHtml(
+        <p
+          style="
+            margin: 0 0 6px;
+            font-size: 16px;
+            font-weight: 600;
+          "
+        >
+          ${escapeHtml(
             stage ||
             '正在处理歌曲…'
           )}
-            </strong>
-          </p>
+        </p>
 
-          <p
-            class="settings-note"
-            style="
-              margin-top: 0;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
-            "
-          >
-            ${escapeHtml(
+        <p
+          class="settings-note"
+          style="
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          "
+        >
+          ${escapeHtml(
             currentTitle
           )}
-          </p>
-        `
+        </p>
+      </div>
+    `
           : `
-          <p class="settings-note">
-            ${pendingTrackCount
+      <p class="settings-note">
+        ${pendingTrackCount
             ? '准备处理下一首歌曲…'
             : '歌曲和封面都已经存在，正在完成最后整理。'
           }
-          </p>
-        `
+      </p>
+    `
         }
-    `;
+`;
+
 
     };
 
@@ -1139,10 +1146,10 @@ async function downloadIncomingSyncSnapshot(
 
 
       els.modalBody.innerHTML = `
-      <p>
-        <strong>
-          正在确认同步结果
-        </strong>
+  <p>
+  <strong>
+    正在确认同步结果
+  </strong>
       </p>
 
       <p class="settings-note">
@@ -1156,7 +1163,7 @@ async function downloadIncomingSyncSnapshot(
       <p class="settings-note">
         请稍候，这一步不会重新下载歌曲。
       </p>
-    `;
+`;
 
     };
 
@@ -1334,17 +1341,23 @@ async function downloadIncomingSyncSnapshot(
         await fetch(
           `${invite.server}` +
           `/api/sync/sessions/` +
-          `${encodeURIComponent(
-            invite.sessionId
-          )}` +
+          `${
+  encodeURIComponent(
+    invite.sessionId
+  )
+}` +
           `/tracks/` +
-          `${encodeURIComponent(
-            trackId
-          )}` +
+          `${
+  encodeURIComponent(
+    trackId
+  )
+}` +
           `/audio` +
-          `?clientId=${encodeURIComponent(
-            getSyncClientId()
-          )}`,
+          `?clientId=${
+  encodeURIComponent(
+    getSyncClientId()
+  )
+}`,
           {
             cache:
               'no-store',
@@ -1359,7 +1372,7 @@ async function downloadIncomingSyncSnapshot(
       if (!audioResponse.ok) {
 
         throw new Error(
-          `下载 MP3 失败：${audioResponse.status}`
+          `下载 MP3 失败：${ audioResponse.status } `
         );
 
       }
@@ -1413,17 +1426,23 @@ async function downloadIncomingSyncSnapshot(
         await fetch(
           `${invite.server}` +
           `/api/sync/sessions/` +
-          `${encodeURIComponent(
-            invite.sessionId
-          )}` +
+          `${
+  encodeURIComponent(
+    invite.sessionId
+  )
+}` +
           `/tracks/` +
-          `${encodeURIComponent(
-            trackId
-          )}` +
+          `${
+  encodeURIComponent(
+    trackId
+  )
+}` +
           `/cover` +
-          `?clientId=${encodeURIComponent(
-            getSyncClientId()
-          )}`,
+          `?clientId=${
+  encodeURIComponent(
+    getSyncClientId()
+  )
+}`,
           {
             cache:
               'no-store',
@@ -1438,7 +1457,7 @@ async function downloadIncomingSyncSnapshot(
       if (!coverResponse.ok) {
 
         throw new Error(
-          `下载封面失败：${coverResponse.status}`
+          `下载封面失败：${ coverResponse.status } `
         );
 
       }
@@ -1782,7 +1801,7 @@ async function downloadIncomingSyncSnapshot(
 
 
   console.log(
-    `手机同步完成：${invite.sessionId}`
+    `手机同步完成：${ invite.sessionId } `
   );
   return {
 
@@ -1928,9 +1947,11 @@ async function reportIncomingSyncMissing(
     await fetch(
       `${invite.server}` +
       `/api/sync/sessions/` +
-      `${encodeURIComponent(
-        invite.sessionId
-      )}` +
+      `${
+  encodeURIComponent(
+    invite.sessionId
+  )
+}` +
       `/missing`,
       {
         method:
@@ -1988,7 +2009,7 @@ async function reportIncomingSyncMissing(
 
     throw new Error(
       data?.error ||
-      `报告缺失歌曲失败：${response.status}`
+      `报告缺失歌曲失败：${ response.status } `
     );
 
   }
@@ -2041,9 +2062,11 @@ async function sendIncomingSyncHeartbeat(
     await fetch(
       `${invite.server}` +
       `/api/sync/sessions/` +
-      `${encodeURIComponent(
-        invite.sessionId
-      )}` +
+      `${
+  encodeURIComponent(
+    invite.sessionId
+  )
+}` +
       `/heartbeat`,
       {
         method:
@@ -2080,7 +2103,7 @@ async function sendIncomingSyncHeartbeat(
   ) {
 
     throw new Error(
-      `同步心跳失败：${response.status}`
+      `同步心跳失败：${ response.status } `
     );
 
   }
@@ -2188,9 +2211,11 @@ async function cancelIncomingSyncOnServer(
     await fetch(
       `${invite.server}` +
       `/api/sync/sessions/` +
-      `${encodeURIComponent(
-        invite.sessionId
-      )}` +
+      `${
+  encodeURIComponent(
+    invite.sessionId
+  )
+}` +
       `/cancel`,
       {
         method:
@@ -2229,7 +2254,7 @@ async function cancelIncomingSyncOnServer(
 
     throw new Error(
       data?.error ||
-      `停止同步失败：${response.status}`
+      `停止同步失败：${ response.status } `
     );
 
   }
@@ -2370,7 +2395,7 @@ export async function openIncomingSyncPreview() {
       await fetch(
         `${invite.server}` +
         `/api/sync/sessions/` +
-        `${encodeURIComponent(invite.sessionId)}` +
+        `${ encodeURIComponent(invite.sessionId) }` +
         `/manifest`,
         {
           cache:
@@ -2408,7 +2433,7 @@ export async function openIncomingSyncPreview() {
 
       throw new Error(
         data?.error ||
-        `同步连接失败：${response.status}`
+        `同步连接失败：${ response.status } `
       );
 
     }
@@ -2463,10 +2488,10 @@ export async function openIncomingSyncPreview() {
         false,
 
       body: `
-    <p>
-      <strong>
-        正在检查手机文件
-      </strong>
+  <p>
+  <strong>
+    正在检查手机文件
+  </strong>
     </p>
 
     <p class="settings-note">
@@ -2480,7 +2505,7 @@ export async function openIncomingSyncPreview() {
     <p class="settings-note">
       检查完成后，只会同步缺少的内容。
     </p>
-  `,
+`,
 
       onPrimary:
         async () => { }
@@ -2553,8 +2578,8 @@ export async function openIncomingSyncPreview() {
       showCancel:
         true,
       body: `
-        <p class="settings-note">
-          已成功连接电脑上的
+  <p class="settings-note">
+    已成功连接电脑上的
           Gama Music Desktop。
         </p>
 
@@ -2599,8 +2624,9 @@ export async function openIncomingSyncPreview() {
       )}
         </p>
 
-        ${filesAlreadyComplete
-          ? `
+        ${
+  filesAlreadyComplete
+    ? `
     <p>
       <strong>
         歌曲和封面已经完整
@@ -2613,14 +2639,14 @@ export async function openIncomingSyncPreview() {
       并清理电脑主库中已经不存在的手机歌曲。
     </p>
   `
-          : `
+    : `
     <p class="settings-note">
       开始更新后，只会下载手机缺少的歌曲和封面。
       播放列表将更新为电脑 Web 当前的版本。
     </p>
   `
-        }
-      `,
+}
+`,
 
       onPrimary:
         async () => {
@@ -2745,10 +2771,10 @@ export async function openIncomingSyncPreview() {
                 '完成',
 
               body: `
-    <p>
-      <strong>
-        手机音乐已经更新完成。
-      </strong>
+  <p>
+  <strong>
+    手机音乐已经更新完成。
+  </strong>
     </p>
 
     <p>
@@ -2773,43 +2799,46 @@ export async function openIncomingSyncPreview() {
   ${syncResult.reusedAudioCount}
   首
 </p>
-${syncResult.unchangedTrackCount
-                  ? `
+${
+  syncResult.unchangedTrackCount
+  ? `
     <p class="settings-note">
       完全跳过：
       ${syncResult.unchangedTrackCount}
       首
     </p>
   `
-                  : ''
-                }
+  : ''
+}
 
-${syncResult.metadataUpdatedCount
-                  ? `
+${
+  syncResult.metadataUpdatedCount
+  ? `
     <p class="settings-note">
       更新歌曲资料：
       ${syncResult.metadataUpdatedCount}
       首
     </p>
   `
-                  : ''
-                }
+  : ''
+}
 
-    ${syncResult.removedTrackCount
-                  ? `
+    ${
+  syncResult.removedTrackCount
+  ? `
           <p class="settings-note">
             已删除电脑主库中不存在的旧歌曲：
             ${syncResult.removedTrackCount}
             首
           </p>
         `
-                  : ''
-                }
+  : ''
+}
 
-    <p class="settings-note">
-      同步临时文件已经清理。
-    </p>
-  `,
+<p class="settings-note">
+  同步临时文件已经清理。
+</p>
+`,
 
               onPrimary:
                 async () => { }
@@ -2832,7 +2861,7 @@ ${syncResult.metadataUpdatedCount
 
 
             window.alert(
-              `同步失败：${error.message}`
+              `同步失败：${ error.message } `
             );
 
           } finally {
@@ -2881,16 +2910,16 @@ ${syncResult.metadataUpdatedCount
         false,
 
       body: `
-        <p class="settings-note">
-          无法读取同步内容：
+  <p class="settings-note">
+    无法读取同步内容：
         </p>
 
-        <p>
-          ${escapeHtml(
-        error.message
-      )}
-        </p>
-      `,
+  <p>
+    ${escapeHtml(
+      error.message
+    )}
+  </p>
+`,
 
       onPrimary:
         async () => { }
@@ -2997,334 +3026,336 @@ async function watchPhoneSyncLocalUploads(
 
     const data =
       await api(
-        `/api/sync/sessions/${encodeURIComponent(
-          sessionId
-        )}/plan`,
-        {
-          cache:
-            'no-store'
-        }
+        `/api/sync/sessions/${
+  encodeURIComponent(
+    sessionId
+  )
+}/plan`,
+{
+  cache:
+  'no-store'
+}
       );
 
 
 
-    /*
-     * 手机还没有扫码。
-     */
-    if (
-      !data?.missing?.reportedAt
-    ) {
+/*
+ * 手机还没有扫码。
+ */
+if (
+  !data?.missing?.reportedAt
+) {
 
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            1500
-          )
-      );
-
-      continue;
-
-    }
-
-
-    /*
-     * 所有资源已经准备完成。
-     */
-    if (
-      [
-        'missing-ready',
-        'completed'
-      ].includes(
-        data?.session?.status
+  await new Promise(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        1500
       )
-    ) {
+  );
 
-      setSyncLocalUploadStatus(
-        '手机需要的同步文件已经全部准备完成。'
-      );
+  continue;
 
-
-      return;
-
-    }
+}
 
 
-    /*
-     * 正常的本地文件需求。
-     */
-    const localAudioTrackIds =
-      Array.isArray(
-        data?.plan
-          ?.localAudioTrackIds
+/*
+ * 所有资源已经准备完成。
+ */
+if (
+  [
+    'missing-ready',
+    'completed'
+  ].includes(
+    data?.session?.status
+  )
+) {
+
+  setSyncLocalUploadStatus(
+    '手机需要的同步文件已经全部准备完成。'
+  );
+
+
+  return;
+
+}
+
+
+/*
+ * 正常的本地文件需求。
+ */
+const localAudioTrackIds =
+  Array.isArray(
+    data?.plan
+      ?.localAudioTrackIds
+  )
+    ? data.plan
+      .localAudioTrackIds
+      .map(String)
+    : [];
+
+
+const localCoverTrackIds =
+  Array.isArray(
+    data?.plan
+      ?.localCoverTrackIds
+  )
+    ? data.plan
+      .localCoverTrackIds
+      .map(String)
+    : [];
+
+
+/*
+ * Bilibili 下载失败以后，
+ * Desktop 会把这些 ID
+ * 放到 fallback。
+ */
+const fallbackAudioTrackIds =
+  Array.isArray(
+    data?.fallback
+      ?.audioTrackIds
+  )
+    ? data.fallback
+      .audioTrackIds
+      .map(String)
+    : [];
+
+
+const fallbackCoverTrackIds =
+  Array.isArray(
+    data?.fallback
+      ?.coverTrackIds
+  )
+    ? data.fallback
+      .coverTrackIds
+      .map(String)
+    : [];
+
+
+/*
+ * Web 需要负责上传的资源：
+ *
+ * 1. 本地歌曲
+ * 2. Bilibili 下载失败的歌曲
+ */
+const audioTrackIds =
+  new Set([
+    ...localAudioTrackIds,
+    ...fallbackAudioTrackIds
+  ]);
+
+
+const coverTrackIds =
+  new Set([
+    ...localCoverTrackIds,
+    ...fallbackCoverTrackIds
+  ]);
+
+
+const fallbackAudioTrackIdSet =
+  new Set(
+    fallbackAudioTrackIds
+  );
+
+
+const fallbackCoverTrackIdSet =
+  new Set(
+    fallbackCoverTrackIds
+  );
+
+
+const requestedTrackIds =
+  [
+    ...new Set([
+      ...audioTrackIds,
+      ...coverTrackIds
+    ])
+  ];
+
+
+/*
+ * 当前没有需要 Web 上传的东西，
+ * 但不能 return。
+ *
+ * Bilibili 可能还正在下载，
+ * 后面仍可能产生 fallback。
+ */
+if (
+  !requestedTrackIds.length
+) {
+
+  setSyncLocalUploadStatus(
+    '正在准备手机需要的歌曲……'
+  );
+
+
+  await new Promise(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        1500
       )
-        ? data.plan
-          .localAudioTrackIds
-          .map(String)
-        : [];
+  );
 
+  continue;
 
-    const localCoverTrackIds =
-      Array.isArray(
-        data?.plan
-          ?.localCoverTrackIds
-      )
-        ? data.plan
-          .localCoverTrackIds
-          .map(String)
-        : [];
+}
 
 
-    /*
-     * Bilibili 下载失败以后，
-     * Desktop 会把这些 ID
-     * 放到 fallback。
-     */
-    const fallbackAudioTrackIds =
-      Array.isArray(
-        data?.fallback
-          ?.audioTrackIds
-      )
-        ? data.fallback
-          .audioTrackIds
-          .map(String)
-        : [];
+for (
+  let index = 0;
+  index <
+  requestedTrackIds.length;
+  index += 1
+) {
 
+  const trackId =
+    requestedTrackIds[
+    index
+    ];
 
-    const fallbackCoverTrackIds =
-      Array.isArray(
-        data?.fallback
-          ?.coverTrackIds
-      )
-        ? data.fallback
-          .coverTrackIds
-          .map(String)
-        : [];
 
-
-    /*
-     * Web 需要负责上传的资源：
-     *
-     * 1. 本地歌曲
-     * 2. Bilibili 下载失败的歌曲
-     */
-    const audioTrackIds =
-      new Set([
-        ...localAudioTrackIds,
-        ...fallbackAudioTrackIds
-      ]);
-
-
-    const coverTrackIds =
-      new Set([
-        ...localCoverTrackIds,
-        ...fallbackCoverTrackIds
-      ]);
-
-
-    const fallbackAudioTrackIdSet =
-      new Set(
-        fallbackAudioTrackIds
-      );
-
-
-    const fallbackCoverTrackIdSet =
-      new Set(
-        fallbackCoverTrackIds
-      );
-
-
-    const requestedTrackIds =
-      [
-        ...new Set([
-          ...audioTrackIds,
-          ...coverTrackIds
-        ])
-      ];
-
-
-    /*
-     * 当前没有需要 Web 上传的东西，
-     * 但不能 return。
-     *
-     * Bilibili 可能还正在下载，
-     * 后面仍可能产生 fallback。
-     */
-    if (
-      !requestedTrackIds.length
-    ) {
-
-      setSyncLocalUploadStatus(
-        '正在准备手机需要的歌曲……'
-      );
-
-
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            1500
-          )
-      );
-
-      continue;
-
-    }
-
-
-    for (
-      let index = 0;
-      index <
-      requestedTrackIds.length;
-      index += 1
-    ) {
-
-      const trackId =
-        requestedTrackIds[
-        index
-        ];
-
-
-      const track =
-        trackById.get(
-          trackId
-        );
-
-
-      if (!track) {
-
-        console.warn(
-          '同步清单里找不到歌曲：',
-          trackId
-        );
-
-        continue;
-
-      }
-
-
-      const needsAudio =
-        audioTrackIds.has(
-          trackId
-        ) &&
-        !uploadedAudio.has(
-          trackId
-        );
-
-
-      const needsCover =
-        coverTrackIds.has(
-          trackId
-        ) &&
-        !uploadedCovers.has(
-          trackId
-        );
-
-
-      if (
-        !needsAudio &&
-        !needsCover
-      ) {
-
-        continue;
-
-      }
-
-
-      const record =
-        await getOfflineTrack(
-          trackId
-        );
-
-
-      const isFallback =
-        fallbackAudioTrackIdSet.has(
-          trackId
-        ) ||
-        fallbackCoverTrackIdSet.has(
-          trackId
-        );
-
-
-      setSyncLocalUploadStatus(
-        isFallback
-          ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
-          : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
-      );
-
-
-      if (needsAudio) {
-
-        if (
-          !(record?.blob instanceof Blob) ||
-          !record.blob.size
-        ) {
-
-          throw new Error(
-            `电脑本地没有可用于兜底的 MP3：${track.title}`
-          );
-
-        }
-
-
-        await uploadSyncTrackAudio(
-          sessionId,
-          trackId,
-          record.blob
-        );
-
-
-        uploadedAudio.add(
-          trackId
-        );
-
-      }
-
-
-      if (needsCover) {
-
-        if (
-          !(record?.coverBlob instanceof Blob) ||
-          !record.coverBlob.size
-        ) {
-
-          throw new Error(
-            `电脑本地没有可用于兜底的封面：${track.title}`
-          );
-
-        }
-
-
-        await uploadSyncTrackCover(
-          sessionId,
-          trackId,
-          record.coverBlob
-        );
-
-
-        uploadedCovers.add(
-          trackId
-        );
-
-      }
-
-    }
-
-
-    /*
-     * 上传完不要直接 return。
-     *
-     * Desktop 上传接口会重新计算
-     * missing-ready。
-     * 下一轮查询确认状态。
-     */
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          800
-        )
+  const track =
+    trackById.get(
+      trackId
     );
+
+
+  if (!track) {
+
+    console.warn(
+      '同步清单里找不到歌曲：',
+      trackId
+    );
+
+    continue;
+
+  }
+
+
+  const needsAudio =
+    audioTrackIds.has(
+      trackId
+    ) &&
+    !uploadedAudio.has(
+      trackId
+    );
+
+
+  const needsCover =
+    coverTrackIds.has(
+      trackId
+    ) &&
+    !uploadedCovers.has(
+      trackId
+    );
+
+
+  if (
+    !needsAudio &&
+    !needsCover
+  ) {
+
+    continue;
+
+  }
+
+
+  const record =
+    await getOfflineTrack(
+      trackId
+    );
+
+
+  const isFallback =
+    fallbackAudioTrackIdSet.has(
+      trackId
+    ) ||
+    fallbackCoverTrackIdSet.has(
+      trackId
+    );
+
+
+  setSyncLocalUploadStatus(
+    isFallback
+      ? `Bilibili 下载失败，正在使用电脑副本兜底：${track.title}`
+      : `正在发送本地歌曲：${index + 1} / ${requestedTrackIds.length} · ${track.title}`
+  );
+
+
+  if (needsAudio) {
+
+    if (
+      !(record?.blob instanceof Blob) ||
+      !record.blob.size
+    ) {
+
+      throw new Error(
+        `电脑本地没有可用于兜底的 MP3：${track.title}`
+      );
+
+    }
+
+
+    await uploadSyncTrackAudio(
+      sessionId,
+      trackId,
+      record.blob
+    );
+
+
+    uploadedAudio.add(
+      trackId
+    );
+
+  }
+
+
+  if (needsCover) {
+
+    if (
+      !(record?.coverBlob instanceof Blob) ||
+      !record.coverBlob.size
+    ) {
+
+      throw new Error(
+        `电脑本地没有可用于兜底的封面：${track.title}`
+      );
+
+    }
+
+
+    await uploadSyncTrackCover(
+      sessionId,
+      trackId,
+      record.coverBlob
+    );
+
+
+    uploadedCovers.add(
+      trackId
+    );
+
+  }
+
+}
+
+
+/*
+ * 上传完不要直接 return。
+ *
+ * Desktop 上传接口会重新计算
+ * missing-ready。
+ * 下一轮查询确认状态。
+ */
+await new Promise(
+  (resolve) =>
+    setTimeout(
+      resolve,
+      800
+    )
+);
 
   }
 
@@ -3333,9 +3364,9 @@ async function watchPhoneSyncLocalUploads(
 
 
 
-  setSyncLocalUploadStatus(
-    '同步会话已超时，请重新生成二维码。'
-  );
+setSyncLocalUploadStatus(
+  '同步会话已超时，请重新生成二维码。'
+);
 
 }
 
