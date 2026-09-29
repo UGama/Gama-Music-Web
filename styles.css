@@ -614,6 +614,7 @@ input::placeholder {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   button,
   button[aria-label]::after {
     transition: none;
@@ -960,11 +961,16 @@ input[type="range"] {
   }
 
   .topbar {
-    position: relative;
-    top: auto;
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 20;
+
     padding: 2px 0 14px;
-    background: transparent;
-    backdrop-filter: none;
+
+    background: rgba(247, 248, 250, 0.94);
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
 
   .brand-subtitle {
@@ -1250,6 +1256,7 @@ input[type="range"] {
 }
 
 @media (hover: hover) and (pointer: fine) {
+
   .mode-row>.icon-button:hover,
   .mode-button:not(.active):hover {
     color: var(--teal-strong);
@@ -1547,6 +1554,7 @@ input[type="range"] {
 }
 
 @keyframes gama-cover-breathe {
+
   0%,
   100% {
     transform: scale(1);
@@ -1560,6 +1568,7 @@ input[type="range"] {
 }
 
 @keyframes gama-cover-shine {
+
   0%,
   58% {
     transform: translateX(-140%);
@@ -1611,6 +1620,7 @@ input[type="range"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .player.playing .player-art,
   .player.playing .player-art::after {
     animation: none;
