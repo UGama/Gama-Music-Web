@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '84';
+const APP_VERSION = '85';
 
 const CACHE_NAME =
   `gama-music-shell-v${APP_VERSION}`;
