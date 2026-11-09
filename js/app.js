@@ -1139,6 +1139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   restoreMobileDownloadFailures();
+  startServerConnectionMonitor();
   /*
  * 手机重新打开以后，
  * 恢复上次被系统暂停的下载。
@@ -1147,9 +1148,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     isMobilePlayerMode()
   ) {
 
-    await checkServerConnection();
-
-    resumeMobileDownloads()
+    checkServerConnection()
+      .then(() => resumeMobileDownloads())
       .catch(
         (error) => {
 
@@ -1161,6 +1161,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       );
 
+  } else {
+    void checkServerConnection();
   }
   /*
  * 如果网页在 Bilibili 下载期间刷新，
@@ -1259,6 +1261,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   }
 
-
-  startServerConnectionMonitor();
 });

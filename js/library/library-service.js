@@ -463,7 +463,7 @@ export async function checkServerConnection() {
 
 
   /*
-   * Server 5 秒没有响应，
+   * Server 10 秒没有响应，
    * 就认为这次连接失败。
    */
   const timeout =
@@ -471,7 +471,7 @@ export async function checkServerConnection() {
       () => {
         controller.abort();
       },
-      5000
+      10000
     );
 
 
@@ -480,6 +480,7 @@ export async function checkServerConnection() {
     await api(
       '/api/health',
       {
+        cache: 'no-store',
         signal:
           controller.signal
       }

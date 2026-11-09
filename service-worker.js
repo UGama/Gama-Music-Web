@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '85';
+const APP_VERSION = '86';
 
 const CACHE_NAME =
   `gama-music-shell-v${APP_VERSION}`;
@@ -49,6 +49,22 @@ const SHELL_ASSETS = [
   './assets/playlist/tiger.svg',
   './assets/playlist/lion.svg'
 ];
+
+const SHELL_PATHS = new Set(
+  SHELL_ASSETS.map((asset) => new URL(asset, self.registration.scope).pathname)
+);
+
+async function loadShell(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(
+    request.mode === 'navigate' ? './index.html' : request,
+    { ignoreSearch: true }
+  );
+
+  // The active worker serves one complete shell. Updates install in a new cache.
+  return cached || fetch(request);
+}
+
 
 
 self.addEventListener(
@@ -251,6 +267,11 @@ self.addEventListener('fetch', (event) => {
 
   }
 
+
+  if (SHELL_PATHS.has(url.pathname)) {
+    event.respondWith(loadShell(event.request));
+    return;
+  }
 
   event.respondWith(
 
